@@ -15,9 +15,17 @@ class ParseTree {
 public:
     ParseTree() = default;
 
+    void addFunctionDeclaration(std::unique_ptr<FunctionDeclASTNode> &&declaration);
+
+    void addTypeDeclaration(std::unique_ptr<TypeDeclASTNode> &&declaration);
+
+    void addDataConstructor(const std::string &type, std::unique_ptr<DataConstructorASTNode> &&constructor);
+
     bool functionExists(const std::string &name) const;
 
     bool typeExists(const std::string &name) const;
+
+    const std::unique_ptr<TypeDeclASTNode> &getTypeByName(const std::string &name) const;
 
 private:
     std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> declaredTypeNodes;

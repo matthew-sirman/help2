@@ -106,7 +106,7 @@ Token Tokeniser::nextToken() {
         if (position != source.end() && *position == ']') {
             curToken = "[]";
             position++;
-            return curTokenType = Token::List;
+            return curTokenType = Token::EmptyList;
         } else {
             curToken = "[";
             return curTokenType = Token::OpenList;
@@ -124,10 +124,16 @@ Token Tokeniser::nextToken() {
     }
     if (*position == ':') {
         position++;
-        if (position != source.end() && std::string(position, std::min(position + 2, source.end())) == ":=") {
-            curToken = "::=";
-            position += 2;
-            return curTokenType = Token::TypeConstructorSpecifier;
+        if (position != source.end() && *position == ':') {
+            position++;
+            if (position != source.end() && *position == '=') {
+                curToken = "::=";
+                position++;
+                return curTokenType = Token::TypeConstructorSpecifier;
+            } else {
+                curToken = "::";
+                return curTokenType = Token::ConsList;
+            }
         } else {
             curToken = ":";
             return curTokenType = Token::ExprTypeSpecifier;

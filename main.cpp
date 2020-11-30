@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 
         Parser parser(Tokeniser(std::string(argv[1]), sourceString));
 
-        if (parser.parse()) {
+        if (std::unique_ptr<ParseTree> tree = parser.parse()) {
             std::cout << "Success!" << std::endl;
         }
 

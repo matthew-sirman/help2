@@ -5,6 +5,8 @@
 #ifndef HELP2_PARSER_H
 #define HELP2_PARSER_H
 
+#include <unordered_set>
+
 #include "Tokeniser.h"
 #include "ParseTree.h"
 
@@ -25,9 +27,21 @@ private:
 
     std::unique_ptr<ParseTree> parseInfixType(std::unique_ptr<ParseTree> tree);
 
+    std::unique_ptr<ParseTree> parseDataConstructors(std::unique_ptr<ParseTree> tree, const std::string &typeName,
+                                                     const std::unordered_set<std::string> &typeParameters);
+
     std::unique_ptr<ParseTree> parseDefinition(std::unique_ptr<ParseTree> tree);
 
-    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance();
+    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance(const std::unique_ptr<ParseTree> &tree);
+
+    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance(const std::unique_ptr<ParseTree> &tree,
+                                                           const std::unordered_set<std::string> &polyTypes);
+
+    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance(const std::unique_ptr<ParseTree> &tree, bool checkPolyTypes,
+                                                           const std::unordered_set<std::string> &polyTypes);
+
+    std::unique_ptr<TypeInstanceASTNode> parseConstructorTypeInstance(const std::unique_ptr<ParseTree> &tree,
+                                                                      const std::unordered_set<std::string> &polyTypes);
 
     void logError(const std::string &message);
 

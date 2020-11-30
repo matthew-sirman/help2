@@ -8,9 +8,13 @@
 #include "TypeASTNodes.h"
 
 class FunctionDeclASTNode {
+public:
+    FunctionDeclASTNode(std::string name, std::unique_ptr<TypeInstanceASTNode> &&funcType);
+
+    const std::string &name() const { return funcName; }
 
 private:
-    std::string name;
+    std::string funcName;
     std::unique_ptr<TypeInstanceASTNode> funcType;
 };
 
@@ -51,6 +55,10 @@ class InfixFunctionImplASTNode : public FunctionImplASTNode {
 };
 
 class FunctionDefinitionASTNode {
+public:
+    FunctionDefinitionASTNode(std::unique_ptr<FunctionDeclASTNode> &&declaration);
+
+    const std::string &name() const { return declaration->name(); }
 
 private:
     std::unique_ptr<FunctionDeclASTNode> declaration;

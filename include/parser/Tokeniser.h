@@ -29,7 +29,8 @@
  * OpenList: '['
  * CommaSeparator: ','
  * CloseList: ']'
- * List: []
+ * EmptyList: []
+ * ConsList: '::'
  * Unit: ()
  * OpPlus: '+'
  * OpMinus: '-'
@@ -60,7 +61,8 @@ enum class Token {
     OpenList,
     CommaSeparator,
     CloseList,
-    List,
+    EmptyList,
+    ConsList,
     Unit,
     OpPlus,
     OpMinus,
