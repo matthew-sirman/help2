@@ -17,6 +17,8 @@ public:
 
     void addFunctionDeclaration(std::unique_ptr<FunctionDeclASTNode> &&declaration);
 
+    void addFunctionImplementation(const std::string &func, std::unique_ptr<FunctionImplASTNode> &&implementation);
+
     void addTypeDeclaration(std::unique_ptr<TypeDeclASTNode> &&declaration);
 
     void addDataConstructor(const std::string &type, std::unique_ptr<DataConstructorASTNode> &&constructor);
@@ -25,11 +27,18 @@ public:
 
     bool typeExists(const std::string &name) const;
 
+    bool constructorExists(const std::string &name) const;
+
+    const std::unique_ptr<FunctionDefinitionASTNode> &getFuncByName(const std::string &name) const;
+
     const std::unique_ptr<TypeDeclASTNode> &getTypeByName(const std::string &name) const;
+
+    const DataConstructorASTNode *getConstructorByName(const std::string &name) const;
 
 private:
     std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> declaredTypeNodes;
     std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> definedFunctionNodes;
+    std::unordered_map<std::string, DataConstructorASTNode *> declaredDataConstructors;
 };
 
 #endif //HELP2_PARSETREE_H

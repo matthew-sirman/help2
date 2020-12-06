@@ -22,6 +22,12 @@ class DataConstructorASTNode {
 public:
     DataConstructorASTNode(std::string constructorName);
 
+    constexpr const std::string &name() const { return constructorName; }
+
+    virtual constexpr size_t args() const = 0;
+
+    virtual constexpr TypeUsage usage() const = 0;
+
 private:
     std::string constructorName;
 };
@@ -31,6 +37,11 @@ public:
     PrefixDataConstructorASTNode(const std::string &constructorName);
 
     PrefixDataConstructorASTNode(const std::string &constructorName, std::vector<std::unique_ptr<TypeInstanceASTNode>> &&parameters);
+
+    size_t args() const override { return parameters.size(); }
+
+    constexpr TypeUsage usage() const override { return TypeUsage::Prefix; }
+
 private:
     std::vector<std::unique_ptr<TypeInstanceASTNode>> parameters;
 };
@@ -39,6 +50,10 @@ class InfixDataConstructorASTNode : public DataConstructorASTNode {
 public:
     InfixDataConstructorASTNode(const std::string &constructorName, std::unique_ptr<TypeInstanceASTNode> &&leftParam,
                                 std::unique_ptr<TypeInstanceASTNode> &&rightParam);
+
+    constexpr size_t args() const override { return 2; }
+
+    constexpr TypeUsage usage() const override { return TypeUsage::Infix; }
 
 private:
     std::unique_ptr<TypeInstanceASTNode> lhs, rhs;

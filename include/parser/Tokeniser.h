@@ -23,17 +23,16 @@
  * InSpecifier: 'in'
  * LambdaSpecifier: '$'
  * Identifier: [a-zA-Z][a-zA-Z0-9_]*'? (e.g. name_Name123')
- * IntegralLiteral: [0-9]+
- * DecimalLiteral: [0-9]+\.[0-9]+
- * StringLiteral: ".*"
+ * IntegralLiteral: [0-9]+ (e.g. 12345)
+ * DecimalLiteral: [0-9]+\.[0-9]+ (e.g. 123.45)
+ * StringLiteral: ".*" (e.g. "Hello, World!")
  * OpenList: '['
  * CommaSeparator: ','
  * CloseList: ']'
  * EmptyList: []
  * ConsList: '::'
  * Unit: ()
- * OpPlus: '+'
- * OpMinus: '-'
+ * SpecialOperator: '+', '-', '*', '/', '%'
  * FuncType: '->'
  * OpenParenthesis: '('
  * CloseParenthesis: ')'
@@ -64,8 +63,8 @@ enum class Token {
     EmptyList,
     ConsList,
     Unit,
-    OpPlus,
-    OpMinus,
+    SpecialInfixOperator,
+    SpecialPrefixOperator,
     FuncType,
     OpenParenthesis,
     CloseParenthesis,

@@ -43,6 +43,21 @@ private:
     std::unique_ptr<TypeInstanceASTNode> parseConstructorTypeInstance(const std::unique_ptr<ParseTree> &tree,
                                                                       const std::unordered_set<std::string> &polyTypes);
 
+    std::unique_ptr<PatternASTNode> parsePattern(const std::unique_ptr<ParseTree> &tree,
+                                                 std::unordered_set<std::string> &usedBinders);
+
+//    std::unique_ptr<
+
+    std::unique_ptr<ExpressionASTNode> parseExpression(const std::unique_ptr<ParseTree> &tree,
+                                                       const std::unordered_set<std::string> &binders,
+                                                       int currentPrecedence);
+
+    std::unique_ptr<LetBindingASTNode> parseLetBinding(const std::unique_ptr<ParseTree> &tree,
+                                                       const std::unordered_set<std::string> &binders);
+
+    std::unique_ptr<LambdaExpressionASTNode> parseLambda(const std::unique_ptr<ParseTree> &tree,
+                                                         const std::unordered_set<std::string> &binders);
+
     void logError(const std::string &message);
 
     Tokeniser tokeniser;

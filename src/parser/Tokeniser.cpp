@@ -3,6 +3,8 @@
 //
 
 #include <iostream>
+#include <regex>
+
 #include "../../include/parser/Tokeniser.h"
 
 Tokeniser::Tokeniser(std::string fileName, std::string source)
@@ -85,21 +87,21 @@ Token Tokeniser::nextToken() {
         position++;
         return curTokenType = Token::TypeUnionSplitter;
     }
-    if (*position == '+') {
-        curToken = "+";
-        position++;
-        return curTokenType = Token::OpPlus;
+    std::cmatch operatorMatch;
+    if (std::regex_search(position.base(), operatorMatch, std::regex(R"(^(\+|-(?!>)|\*|/|%|\.))"))) {
+        curToken = operatorMatch.str();
+        position += operatorMatch.size();
+        return curTokenType = Token::SpecialInfixOperator;
     }
-    if (*position == '-') {
-        position++;
-        if (position != source.end() && *position == '>') {
-            curToken = "->";
-            position++;
-            return curTokenType = Token::FuncType;
-        } else {
-            curToken = "-";
-            return curTokenType = Token::OpMinus;
-        }
+    if (std::regex_search(position.base(), operatorMatch, std::regex(R"(^\((\+|-(?!>)|\*|/|%|\.)\))"))) {
+        curToken = operatorMatch[1].str();
+        position += operatorMatch.size();
+        return curTokenType = Token::SpecialPrefixOperator;
+    }
+    if (std::regex_search(position.base(), std::regex("^->"))) {
+        curToken = "->";
+        position += 2;
+        return curTokenType = Token::FuncType;
     }
     if (*position == '[') {
         position++;
@@ -146,34 +148,34 @@ Token Tokeniser::nextToken() {
     }
 
     // Check for keyword tokens
-    if (std::string(position, std::min(position + 5, source.end())) == "func ") {
+    if (std::regex_search(position.base(), std::regex("^func\\W"))) {
         curToken = "func";
-        position += 5;
+        position += 4;
         return curTokenType = Token::FuncDecl;
     }
-    if (std::string(position, std::min(position + 5, source.end())) == "type ") {
-        curToken = "type";
-        position += 5;
-        return curTokenType = Token::TypeDecl;
-    }
-    if (std::string(position, std::min(position + 6, source.end())) == "value ") {
+    if (std::regex_search(position.base(), std::regex("^value\\W"))) {
         curToken = "value";
-        position += 6;
+        position += 5;
         return curTokenType = Token::ValueDecl;
     }
-    if (std::string(position, std::min(position + 6, source.end())) == "infix ") {
+    if (std::regex_search(position.base(), std::regex("^type\\W"))) {
+        curToken = "type";
+        position += 4;
+        return curTokenType = Token::TypeDecl;
+    }
+    if (std::regex_search(position.base(), std::regex("^infix\\W"))) {
         curToken = "infix";
-        position += 6;
+        position += 5;
         return curTokenType = Token::Infix;
     }
-    if (std::string(position, std::min(position + 4, source.end())) == "let ") {
+    if (std::regex_search(position.base(), std::regex("^let\\W"))) {
         curToken = "let";
-        position += 4;
+        position += 3;
         return curTokenType = Token::LetSpecifier;
     }
-    if (std::string(position, std::min(position + 3, source.end())) == "in ") {
+    if (std::regex_search(position.base(), std::regex("^in\\W"))) {
         curToken = "in";
-        position += 3;
+        position += 2;
         return curTokenType = Token::InSpecifier;
     }
 
