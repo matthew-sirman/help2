@@ -11,8 +11,8 @@ Parser::Parser(const Tokeniser &tokeniser)
 
 }
 
-std::unique_ptr<ParseTree> Parser::parse() {
-    std::unique_ptr<ParseTree> tree = std::make_unique<ParseTree>();
+std::unique_ptr<ParseTree> Parser::parse(std::unique_ptr<ParseTree> &&tree) {
+    fileIndex = tree->addFile(tokeniser.sourceFileName());
     while (tokeniser.nextToken() != Token::EndOfFile) {
         switch (tokeniser.currentTokenType()) {
             case Token::InvalidToken:
@@ -111,7 +111,9 @@ std::unique_ptr<ParseTree> Parser::parsePrefixFunction(std::unique_ptr<ParseTree
         return nullptr;
     }
 
-    tree->addFunctionDeclaration(std::make_unique<PrefixFunctionDeclASTNode>(functionName, std::move(funcType)));
+    tree->addFunctionDeclaration(std::make_unique<PrefixFunctionDeclASTNode>(
+            tokeniser.lineNumber(), fileIndex, functionName, std::move(funcType))
+    );
 
     return std::move(tree);
 }
@@ -162,9 +164,9 @@ std::unique_ptr<ParseTree> Parser::parseInfixFunction(std::unique_ptr<ParseTree>
     }
 
     // TODO: Customisable precedence and associativity?
-    tree->addFunctionDeclaration(
-            std::make_unique<InfixFunctionDeclASTNode>(functionName, std::move(funcType), 5, Associativity::Left)
-    );
+    tree->addFunctionDeclaration(std::make_unique<InfixFunctionDeclASTNode>(
+            tokeniser.lineNumber(), fileIndex, functionName, std::move(funcType), 5, Associativity::Left
+    ));
 
     return std::move(tree);
 }
@@ -198,13 +200,9 @@ std::unique_ptr<ParseTree> Parser::parseValue(std::unique_ptr<ParseTree> tree) {
         return nullptr;
     }
 
-    // TODO: decide if function types should be disallowed for values
-//    if (valueType->typeUsage() == TypeUsage::Function) {
-//        logError("Value should not have a function type (use 'func' for function types).");
-//        return nullptr;
-//    }
-
-    tree->addFunctionDeclaration(std::make_unique<ValueFunctionDeclASTNode>(valueName, std::move(valueType)));
+    tree->addFunctionDeclaration(std::make_unique<ValueFunctionDeclASTNode>(
+            tokeniser.lineNumber(), fileIndex, valueName, std::move(valueType)
+    ));
 
     return std::move(tree);
 }
@@ -234,14 +232,15 @@ std::unique_ptr<ParseTree> Parser::parsePrefixType(std::unique_ptr<ParseTree> tr
                 // If there are no constructors, then we don't expect to see a '::=' token.
                 // Construct the new prefix type and pass it to the tree
                 tree->addTypeDeclaration(std::make_unique<PrefixTypeDeclASTNode>(
-                        typeName, std::vector<std::string>(typeParameters.begin(), typeParameters.end()))
+                        tokeniser.lineNumber(), fileIndex, typeName,
+                        std::vector<std::string>(typeParameters.begin(), typeParameters.end()))
                 );
                 return std::move(tree);
             default:
                 logError("Unexpected token '" + tokeniser.currentToken() +
-                         "' in type constructor declaration.\n "
+                         "' in type constructor declaration.\n"
                          "Type name should be followed by type variables and optionally "
-                         "type constructor list (e.g. type " + typeName + " [a [b [c ...]]] [::= ...].");
+                         "type constructor list (e.g. type " + typeName + " [a [b [c ...]]] [::= ...]).");
                 return nullptr;
         }
         if (typeParameters.contains(tokeniser.currentToken())) {
@@ -257,14 +256,15 @@ std::unique_ptr<ParseTree> Parser::parsePrefixType(std::unique_ptr<ParseTree> tr
         typeParameters.insert(tokeniser.currentToken());
     }
     // Add the type declaration to the parse tree - this allows for recursive types
-    tree->addTypeDeclaration(std::make_unique<PrefixTypeDeclASTNode>(
-            typeName, std::vector<std::string>(typeParameters.begin(), typeParameters.end())
+    const std::unique_ptr<TypeDeclASTNode> &typeNode = tree->addTypeDeclaration(std::make_unique<PrefixTypeDeclASTNode>(
+            tokeniser.lineNumber(), fileIndex, typeName,
+            std::vector<std::string>(typeParameters.begin(), typeParameters.end())
     ));
     // Skip over '::=' token
     tokeniser.nextToken();
 
     // Now we are looking for constructors of which there should be one or more
-    return parseDataConstructors(std::move(tree), typeName, typeParameters);
+    return parseDataConstructors(std::move(tree), typeNode, typeParameters);
 }
 
 std::unique_ptr<ParseTree> Parser::parseInfixType(std::unique_ptr<ParseTree> tree) {
@@ -302,6 +302,7 @@ std::unique_ptr<ParseTree> Parser::parseInfixType(std::unique_ptr<ParseTree> tre
     std::string rhs = tokeniser.currentToken();
     if (lhs == rhs) {
         logError("Left hand type variable cannot have the same name as right hand type variable.");
+        return nullptr;
     }
 
     if (tree->typeExists(typeName)) {
@@ -310,9 +311,10 @@ std::unique_ptr<ParseTree> Parser::parseInfixType(std::unique_ptr<ParseTree> tre
     }
 
     // Add the type declaration to the parse tree - this allows for recursive types
-    tree->addTypeDeclaration(std::make_unique<InfixTypeDeclASTNode>(
-            typeName, lhs, rhs
-    ));
+    const std::unique_ptr<TypeDeclASTNode> &typeNode =
+            tree->addTypeDeclaration(std::make_unique<InfixTypeDeclASTNode>(
+                    tokeniser.lineNumber(), fileIndex, typeName, lhs, rhs
+            ));
     switch (tokeniser.nextToken()) {
         case Token::EndDecl:
             return std::move(tree);
@@ -326,13 +328,12 @@ std::unique_ptr<ParseTree> Parser::parseInfixType(std::unique_ptr<ParseTree> tre
     tokeniser.nextToken();
 
     // Now we are looking for constructors of which there should be one or more
-    return parseDataConstructors(std::move(tree), typeName, {lhs, rhs});
+    return parseDataConstructors(std::move(tree), typeNode, {lhs, rhs});
 }
 
-std::unique_ptr<ParseTree> Parser::parseDataConstructors(std::unique_ptr<ParseTree> tree, const std::string &typeName,
+std::unique_ptr<ParseTree> Parser::parseDataConstructors(std::unique_ptr<ParseTree> tree,
+                                                         const std::unique_ptr<TypeDeclASTNode> &type,
                                                          const std::unordered_set<std::string> &typeParameters) {
-    std::unordered_set<std::string> addedConstructors;
-
     do {
         switch (tokeniser.currentTokenType()) {
             case Token::Infix: {
@@ -347,13 +348,13 @@ std::unique_ptr<ParseTree> Parser::parseDataConstructors(std::unique_ptr<ParseTr
                 }
                 // The current token should now be a closing parenthesis, or the type we have just put into
                 // lhs, so skip over and the next should be the constructor name.
-                if (tokeniser.nextToken() != Token::Identifier) {
+                if (tokeniser.currentTokenType() != Token::Identifier) {
                     logError("Expected constructor name, but found '" + tokeniser.currentToken() + "'.");
                     return nullptr;
                 }
                 std::string constructorName = tokeniser.currentToken();
-                if (addedConstructors.contains(constructorName)) {
-                    logError("Duplicate constructor name '" + constructorName + "' in type '" + typeName + "'.");
+                if (tree->constructorExists(constructorName)) {
+                    logError("Re-used constructor name '" + constructorName + "' in type '" + type->typeName() + "'.");
                     return nullptr;
                 }
                 // Skip to the next token
@@ -364,8 +365,8 @@ std::unique_ptr<ParseTree> Parser::parseDataConstructors(std::unique_ptr<ParseTr
                     return nullptr;
                 }
 
-                // Skip to the next token and check that it is either the '|' or ';' token
-                switch (tokeniser.nextToken()) {
+                // Check that the token is either the '|' or ';' token
+                switch (tokeniser.currentTokenType()) {
                     case Token::TypeUnionSplitter:
                         // Skip over the '|'
                         tokeniser.nextToken();
@@ -376,11 +377,9 @@ std::unique_ptr<ParseTree> Parser::parseDataConstructors(std::unique_ptr<ParseTr
                         return nullptr;
                 }
 
-                tree->addDataConstructor(
-                        typeName,
-                        std::make_unique<InfixDataConstructorASTNode>(constructorName, std::move(lhs), std::move(rhs))
-                );
-                addedConstructors.insert(constructorName);
+                tree->addDataConstructor(type, std::make_unique<InfixDataConstructorASTNode>(
+                        tokeniser.lineNumber(), fileIndex, type, constructorName, std::move(lhs), std::move(rhs)
+                ));
                 break;
             }
             case Token::Identifier: {
@@ -397,13 +396,17 @@ std::unique_ptr<ParseTree> Parser::parseDataConstructors(std::unique_ptr<ParseTr
                     }
                     params.push_back(std::move(param));
 
+                    if (tokeniser.currentTokenType() == Token::TypeUnionSplitter ||
+                        tokeniser.currentTokenType() == Token::EndDecl) {
+                        break;
+                    }
+
                     tokeniser.nextToken();
                 }
 
-                tree->addDataConstructor(
-                        typeName,
-                        std::make_unique<PrefixDataConstructorASTNode>(constructorName, std::move(params))
-                );
+                tree->addDataConstructor(type, std::make_unique<PrefixDataConstructorASTNode>(
+                        tokeniser.lineNumber(), fileIndex, type, constructorName, std::move(params)
+                ));
 
                 if (tokeniser.currentTokenType() == Token::EndDecl) {
                     return std::move(tree);
@@ -461,10 +464,9 @@ std::unique_ptr<ParseTree> Parser::parseDefinition(std::unique_ptr<ParseTree> tr
                 if (!body) {
                     return nullptr;
                 }
-                tree->addFunctionImplementation(
-                        functionName,
-                        std::make_unique<PrefixFunctionImplASTNode>(std::move(body))
-                );
+                tree->addFunctionImplementation(functionName, std::make_unique<PrefixFunctionImplASTNode>(
+                        tokeniser.lineNumber(), fileIndex, std::move(body)
+                ));
                 // If the next token is not a ';', there as an error
                 if (tokeniser.currentTokenType() != Token::EndDecl) {
                     return nullptr;
@@ -497,10 +499,9 @@ std::unique_ptr<ParseTree> Parser::parseDefinition(std::unique_ptr<ParseTree> tr
             if (!body) {
                 return nullptr;
             }
-            tree->addFunctionImplementation(
-                    functionName,
-                    std::make_unique<PrefixFunctionImplASTNode>(std::move(body), std::move(patterns))
-            );
+            tree->addFunctionImplementation(functionName, std::make_unique<PrefixFunctionImplASTNode>(
+                    tokeniser.lineNumber(), fileIndex, std::move(body), std::move(patterns)
+            ));
             // If the next token is not a ';', there as an error
             if (tokeniser.currentTokenType() != Token::EndDecl) {
                 return nullptr;
@@ -572,11 +573,9 @@ std::unique_ptr<ParseTree> Parser::parseDefinition(std::unique_ptr<ParseTree> tr
     if (!body) {
         return nullptr;
     }
-    tree->addFunctionImplementation(
-            functionName,
-            std::make_unique<InfixFunctionImplASTNode>(std::move(body), std::move(lhs),
-                                                       std::move(rhs))
-    );
+    tree->addFunctionImplementation(functionName, std::make_unique<InfixFunctionImplASTNode>(
+            tokeniser.lineNumber(), fileIndex, std::move(body), std::move(lhs), std::move(rhs)
+    ));
     // If the next token is not a ';', there as an error
     if (tokeniser.currentTokenType() != Token::EndDecl) {
         return nullptr;
@@ -601,18 +600,25 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
     switch (tokeniser.currentTokenType()) {
         case Token::Identifier:
             if (tree->typeExists(tokeniser.currentToken())) {
-                lhs = std::make_unique<PrefixTypeInstanceASTNode>(tokeniser.currentToken());
+                lhs = std::make_unique<PrefixTypeInstanceASTNode>(
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                );
             } else {
                 if (checkPolyTypes && !polyTypes.contains(tokeniser.currentToken())) {
                     logError("Unrecognised type '" + tokeniser.currentToken() + "'.");
                     return nullptr;
                 }
-                lhs = std::make_unique<PolymorphicTypeInstanceASTNode>(tokeniser.currentToken());
+                lhs = std::make_unique<PolymorphicTypeInstanceASTNode>(
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                );
             }
             break;
         case Token::OpenParenthesis:
             tokeniser.nextToken();
             lhs = parseTypeInstance(tree);
+            if (!lhs) {
+                return nullptr;
+            }
             if (tokeniser.currentTokenType() != Token::CloseParenthesis) {
                 logError("Expected closing ')' after nested type.");
                 return nullptr;
@@ -632,8 +638,11 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
             return nullptr;
     }
 
+    // Skip to next token
+    tokeniser.nextToken();
+
     while (true) {
-        switch (tokeniser.nextToken()) {
+        switch (tokeniser.currentTokenType()) {
             case Token::Identifier:
                 if (tree->typeExists(tokeniser.currentToken())) {
                     // If the identifier is not an infix type constructor, bind the new type
@@ -641,8 +650,9 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
                         switch (lhs->typeUsage()) {
                             case TypeUsage::Prefix:
                                 dynamic_cast<PrefixTypeInstanceASTNode *>(lhs.get())->bindParameter(
-                                        std::make_unique<PrefixTypeInstanceASTNode>(tokeniser.currentToken())
-                                );
+                                        std::make_unique<PrefixTypeInstanceASTNode>(
+                                                tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                                        ));
                                 break;
                             case TypeUsage::Infix:
                             case TypeUsage::Function:
@@ -655,7 +665,7 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
                     } else {
                         // If the token is an infix type constructor, create an infix type
                         std::unique_ptr<InfixTypeInstanceASTNode> infixType = std::make_unique<InfixTypeInstanceASTNode>(
-                                tokeniser.currentToken()
+                                tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
                         );
                         infixType->bindLeft(std::move(lhs));
                         // Consume the infix type name token
@@ -678,8 +688,9 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
                                 return nullptr;
                             }
                             dynamic_cast<PrefixTypeInstanceASTNode *>(lhs.get())->bindParameter(
-                                    std::make_unique<PolymorphicTypeInstanceASTNode>(tokeniser.currentToken())
-                            );
+                                    std::make_unique<PolymorphicTypeInstanceASTNode>(
+                                            tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                                    ));
                             break;
                         case TypeUsage::Infix:
                         case TypeUsage::Function:
@@ -694,7 +705,7 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
             case Token::FuncType: {
                 // Here, we are handling an infix function type, but it is very similar to other infix types
                 std::unique_ptr<FunctionTypeInstanceASTNode> funcType = std::make_unique<FunctionTypeInstanceASTNode>(
-                        tokeniser.currentToken()
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
                 );
                 funcType->bindLeft(std::move(lhs));
                 // Consume the '->' token
@@ -711,6 +722,7 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
             }
             case Token::CloseParenthesis:
             case Token::EndDecl:
+            case Token::TypeUnionSplitter:
                 return std::move(lhs);
             case Token::InvalidToken:
                 return nullptr;
@@ -718,6 +730,8 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseTypeInstance(const std::unique
                 logError("Invalid token '" + tokeniser.currentToken() + "' in type instance.");
                 return nullptr;
         }
+        // Skip the current token
+        tokeniser.nextToken();
     }
 }
 
@@ -733,18 +747,24 @@ std::unique_ptr<TypeInstanceASTNode> Parser::parseConstructorTypeInstance(const 
             break;
         case Token::Identifier:
             if (tree->typeExists(tokeniser.currentToken())) {
-                type = std::make_unique<PrefixTypeInstanceASTNode>(tokeniser.currentToken());
+                type = std::make_unique<PrefixTypeInstanceASTNode>(
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                );
+                tokeniser.nextToken();
                 break;
             }
             if (polyTypes.contains(tokeniser.currentToken())) {
-                type = std::make_unique<PolymorphicTypeInstanceASTNode>(tokeniser.currentToken());
+                type = std::make_unique<PolymorphicTypeInstanceASTNode>(
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                );
+                tokeniser.nextToken();
                 break;
             }
             logError("Unrecognised type '" + tokeniser.currentToken() +
                      "'. Parameters for data constructors must name types or reference type variables.");
             return nullptr;
         default:
-            logError("Invalid token '" + tokeniser.currentToken() + "' in infix data constructor.");
+            logError("Invalid token '" + tokeniser.currentToken() + "' in data constructor.");
             return nullptr;
     }
     return std::move(type);
@@ -780,7 +800,9 @@ Parser::parsePattern(const std::unique_ptr<ParseTree> &tree, std::unordered_set<
                 }
                 // Skip over close parenthesis
                 tokeniser.nextToken();
-                return std::make_unique<ConstructorPatternASTNode>(constructorName, std::move(subPatterns));
+                return std::make_unique<ConstructorPatternASTNode>(
+                        tokeniser.lineNumber(), fileIndex, constructorName, std::move(subPatterns)
+                );
             } else {
                 if (usedBinders.contains(tokeniser.currentToken())) {
                     logError("Duplicate variable name '" + tokeniser.currentToken() + "' used in pattern expression.");
@@ -795,14 +817,14 @@ Parser::parsePattern(const std::unique_ptr<ParseTree> &tree, std::unordered_set<
                 // Skip over the close parenthesis
                 tokeniser.nextToken();
                 usedBinders.insert(binder);
-                return std::make_unique<VariablePatternASTNode>(binder);
+                return std::make_unique<VariablePatternASTNode>(tokeniser.lineNumber(), fileIndex, binder);
             }
         case Token::Identifier:
             if (tree->constructorExists(tokeniser.currentToken())) {
                 std::string constructor = tokeniser.currentToken();
                 // Skip over token
                 tokeniser.nextToken();
-                return std::make_unique<ConstructorPatternASTNode>(constructor);
+                return std::make_unique<ConstructorPatternASTNode>(tokeniser.lineNumber(), fileIndex, constructor);
             } else {
                 if (usedBinders.contains(tokeniser.currentToken())) {
                     logError("Duplicate variable name '" + tokeniser.currentToken() + "' used in pattern expression.");
@@ -812,7 +834,7 @@ Parser::parsePattern(const std::unique_ptr<ParseTree> &tree, std::unordered_set<
                 // Skip to next token
                 tokeniser.nextToken();
                 usedBinders.insert(binder);
-                return std::make_unique<VariablePatternASTNode>(binder);
+                return std::make_unique<VariablePatternASTNode>(tokeniser.lineNumber(), fileIndex, binder);
             }
         default:
             logError("Unexpected token '" + tokeniser.currentToken() + "' in pattern.");
@@ -844,11 +866,13 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                 if (!expr) {
                     expr = std::move(nested);
                 } else {
-                    expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(nested));
+                    expr = std::make_unique<ApplicationASTNode>(
+                            tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(nested)
+                    );
                 }
                 break;
             }
-            // Handle unravelling from the recursion
+                // Handle unravelling from the recursion
             case Token::CloseParenthesis:
             case Token::InSpecifier:
             case Token::EndDecl:
@@ -860,16 +884,21 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                 // Finally, fail
                 if (binders.contains(tokeniser.currentToken())) {
                     std::unique_ptr<VariableASTNode> varExpr = std::make_unique<VariableASTNode>(
-                            tokeniser.currentToken());
+                            tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                    );
                     if (!expr) {
                         expr = std::move(varExpr);
                     } else {
-                        expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(varExpr));
+                        expr = std::make_unique<ApplicationASTNode>(
+                                tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(varExpr)
+                        );
                     }
                     // Skip to next
                     tokeniser.nextToken();
                 } else if (tree->functionExists(tokeniser.currentToken())) {
-                    std::unique_ptr<FunctionASTNode> func = std::make_unique<FunctionASTNode>(tokeniser.currentToken());
+                    std::unique_ptr<FunctionASTNode> func = std::make_unique<FunctionASTNode>(
+                            tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                    );
                     const std::unique_ptr<FunctionDeclASTNode> &decl = tree->getFuncByName(
                             tokeniser.currentToken())->decl();
                     switch (decl->funcUsage()) {
@@ -878,7 +907,9 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                             if (!expr) {
                                 expr = std::move(func);
                             } else {
-                                expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(func));
+                                expr = std::make_unique<ApplicationASTNode>(
+                                        tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(func)
+                                );
                             }
                             // Skip to next
                             tokeniser.nextToken();
@@ -910,21 +941,28 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                                 return nullptr;
                             }
                             // Construct the application if this was a sufficiently high precedence operator
-                            expr = std::make_unique<ApplicationASTNode>(std::move(func), std::move(expr));
-                            expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(rhs));
+                            expr = std::make_unique<ApplicationASTNode>(
+                                    tokeniser.lineNumber(), fileIndex, std::move(func), std::move(expr)
+                            );
+                            expr = std::make_unique<ApplicationASTNode>(
+                                    tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(rhs)
+                            );
                             break;
                         }
                     }
                 } else if (tree->constructorExists(tokeniser.currentToken())) {
                     std::unique_ptr<ConstructorASTNode> cons = std::make_unique<ConstructorASTNode>(
-                            tokeniser.currentToken());
+                            tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                    );
                     switch (tree->getConstructorByName(tokeniser.currentToken())->usage()) {
                         case TypeUsage::Prefix:
                             if (expr) {
                                 // If there is already an expression, this is an application,
                                 // so this constructor is applied to a function directly (i.e.
                                 // not called with any further values)
-                                expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(cons));
+                                expr = std::make_unique<ApplicationASTNode>(
+                                        tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(cons)
+                                );
                             } else {
                                 // Otherwise, just set the expression to this value
                                 expr = std::move(cons);
@@ -946,9 +984,13 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                                 return nullptr;
                             }
                             // Apply the left argument
-                            expr = std::make_unique<ApplicationASTNode>(std::move(cons), std::move(expr));
+                            expr = std::make_unique<ApplicationASTNode>(
+                                    tokeniser.lineNumber(), fileIndex, std::move(cons), std::move(expr)
+                            );
                             // Apply the right argument
-                            expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(rhs));
+                            expr = std::make_unique<ApplicationASTNode>(
+                                    tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(rhs)
+                            );
                             break;
                         }
                         default:
@@ -978,7 +1020,9 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                     return std::move(expr);
                 }
                 // Otherwise, make the function node and skip over the token
-                std::unique_ptr<FunctionASTNode> func = std::make_unique<FunctionASTNode>(tokeniser.currentToken());
+                std::unique_ptr<FunctionASTNode> func = std::make_unique<FunctionASTNode>(
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                );
                 tokeniser.nextToken();
                 // Now parse the right hand side of the operator with this precedence plus associativity as
                 // the current precedence
@@ -990,8 +1034,12 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                     return nullptr;
                 }
                 // Build expression calls
-                expr = std::make_unique<ApplicationASTNode>(std::move(func), std::move(expr));
-                expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(rhs));
+                expr = std::make_unique<ApplicationASTNode>(
+                        tokeniser.lineNumber(), fileIndex, std::move(func), std::move(expr)
+                );
+                expr = std::make_unique<ApplicationASTNode>(
+                        tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(rhs)
+                );
                 break;
             }
             case Token::SpecialPrefixOperator: {
@@ -1000,11 +1048,15 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                     logError("DEVELOPER: Missing builtin '" + tokeniser.currentToken() + "'.");
                     return nullptr;
                 }
-                std::unique_ptr<FunctionASTNode> func = std::make_unique<FunctionASTNode>(tokeniser.currentToken());
+                std::unique_ptr<FunctionASTNode> func = std::make_unique<FunctionASTNode>(
+                        tokeniser.lineNumber(), fileIndex, tokeniser.currentToken()
+                );
                 if (!expr) {
                     expr = std::move(func);
                 } else {
-                    expr = std::make_unique<ApplicationASTNode>(std::move(expr), std::move(func));
+                    expr = std::make_unique<ApplicationASTNode>(
+                            tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(func)
+                    );
                 }
                 // Skip to next
                 tokeniser.nextToken();
@@ -1034,8 +1086,32 @@ Parser::parseExpression(const std::unique_ptr<ParseTree> &tree, const std::unord
                 expr = std::move(lambda);
                 break;
             }
-            case Token::IntegralLiteral:
-            case Token::DecimalLiteral:
+            case Token::IntegralLiteral: {
+                std::unique_ptr<IntegralConstructorASTNode> literal = std::make_unique<IntegralConstructorASTNode>(
+                        tokeniser.lineNumber(), fileIndex, std::stoll(tokeniser.currentToken())
+                );
+                if (!expr) {
+                    expr = std::move(literal);
+                } else {
+                    expr = std::make_unique<ApplicationASTNode>(
+                            tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(literal)
+                    );
+                }
+                break;
+            }
+            case Token::DecimalLiteral: {
+                std::unique_ptr<DecimalConstructorASTNode> literal = std::make_unique<DecimalConstructorASTNode>(
+                        tokeniser.lineNumber(), fileIndex, std::stod(tokeniser.currentToken())
+                );
+                if (!expr) {
+                    expr = std::move(literal);
+                } else {
+                    expr = std::make_unique<ApplicationASTNode>(
+                            tokeniser.lineNumber(), fileIndex, std::move(expr), std::move(literal)
+                    );
+                }
+                break;
+            }
             case Token::StringLiteral:
             case Token::OpenList:
             case Token::EmptyList:
@@ -1078,7 +1154,9 @@ Parser::parseLetBinding(const std::unique_ptr<ParseTree> &tree, const std::unord
     if (!usage) {
         return nullptr;
     }
-    return std::make_unique<LetBindingASTNode>(var, std::move(body), std::move(usage));
+    return std::make_unique<LetBindingASTNode>(
+            tokeniser.lineNumber(), fileIndex, var, std::move(body), std::move(usage)
+    );
 }
 
 std::unique_ptr<LambdaExpressionASTNode>
@@ -1099,11 +1177,12 @@ Parser::parseLambda(const std::unique_ptr<ParseTree> &tree, const std::unordered
     if (!body) {
         return nullptr;
     }
-    return std::make_unique<LambdaExpressionASTNode>(var, std::move(body));
+    return std::make_unique<LambdaExpressionASTNode>(
+            tokeniser.lineNumber(), fileIndex, var, std::move(body)
+    );
 }
 
 void Parser::logError(const std::string &message) {
     std::cerr << "[Parse Error] " << tokeniser.sourceFileName() << " (line " << tokeniser.lineNumber() << "): "
-              << message
-              << std::endl;
+              << message << std::endl;
 }

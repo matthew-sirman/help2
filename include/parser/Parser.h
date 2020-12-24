@@ -14,7 +14,7 @@ class Parser {
 public:
     Parser(const Tokeniser &tokeniser);
 
-    std::unique_ptr<ParseTree> parse();
+    std::unique_ptr<ParseTree> parse(std::unique_ptr<ParseTree> &&tree);
 
 private:
     std::unique_ptr<ParseTree> parsePrefixFunction(std::unique_ptr<ParseTree> tree);
@@ -27,7 +27,8 @@ private:
 
     std::unique_ptr<ParseTree> parseInfixType(std::unique_ptr<ParseTree> tree);
 
-    std::unique_ptr<ParseTree> parseDataConstructors(std::unique_ptr<ParseTree> tree, const std::string &typeName,
+    std::unique_ptr<ParseTree> parseDataConstructors(std::unique_ptr<ParseTree> tree,
+                                                     const std::unique_ptr<TypeDeclASTNode> &type,
                                                      const std::unordered_set<std::string> &typeParameters);
 
     std::unique_ptr<ParseTree> parseDefinition(std::unique_ptr<ParseTree> tree);
@@ -46,8 +47,6 @@ private:
     std::unique_ptr<PatternASTNode> parsePattern(const std::unique_ptr<ParseTree> &tree,
                                                  std::unordered_set<std::string> &usedBinders);
 
-//    std::unique_ptr<
-
     std::unique_ptr<ExpressionASTNode> parseExpression(const std::unique_ptr<ParseTree> &tree,
                                                        const std::unordered_set<std::string> &binders,
                                                        int currentPrecedence);
@@ -61,6 +60,7 @@ private:
     void logError(const std::string &message);
 
     Tokeniser tokeniser;
+    size_t fileIndex = -1;
 };
 
 #endif //HELP2_PARSER_H

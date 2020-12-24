@@ -5,8 +5,13 @@
 #ifndef HELP2_FUNCTIONASTNODES_H
 #define HELP2_FUNCTIONASTNODES_H
 
+#include <llvm/IR/Function.h>
+#include <llvm/IR/IRBuilder.h>
+
 #include "TypeASTNodes.h"
 #include "ExpressionASTNodes.h"
+
+class CodeGenerator;
 
 enum class FunctionUsage {
     Prefix,
@@ -14,15 +19,18 @@ enum class FunctionUsage {
     Value
 };
 
-class FunctionDeclASTNode {
+class FunctionDeclASTNode : public ASTNode {
 public:
-    FunctionDeclASTNode(std::string name, std::unique_ptr<TypeInstanceASTNode> &&funcType);
+    FunctionDeclASTNode(size_t lineNum, size_t fileIndex, std::string name,
+                        std::unique_ptr<TypeInstanceASTNode> &&funcType);
 
     const std::string &name() const { return funcName; }
 
     virtual constexpr FunctionUsage funcUsage() const = 0;
 
     virtual size_t maxArgs() const = 0;
+
+    constexpr const std::unique_ptr<TypeInstanceASTNode> &functionType() const { return funcType; }
 
 protected:
     std::string funcName;
@@ -35,7 +43,8 @@ protected:
  */
 class PrefixFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
-    PrefixFunctionDeclASTNode(const std::string &name, std::unique_ptr<TypeInstanceASTNode> &&funcType);
+    PrefixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                              std::unique_ptr<TypeInstanceASTNode> &&funcType);
 
     constexpr FunctionUsage funcUsage() const override { return FunctionUsage::Prefix; }
 
@@ -53,7 +62,8 @@ enum class Associativity {
  */
 class InfixFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
-    InfixFunctionDeclASTNode(const std::string &name, std::unique_ptr<TypeInstanceASTNode> &&funcType,
+    InfixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                             std::unique_ptr<TypeInstanceASTNode> &&funcType,
                              int precedence, Associativity assoc);
 
     constexpr FunctionUsage funcUsage() const override { return FunctionUsage::Infix; }
@@ -76,7 +86,8 @@ private:
  */
 class ValueFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
-    ValueFunctionDeclASTNode(const std::string &name, std::unique_ptr<TypeInstanceASTNode> &&valueType);
+    ValueFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                             std::unique_ptr<TypeInstanceASTNode> &&valueType);
 
     constexpr FunctionUsage funcUsage() const override { return FunctionUsage::Value; }
 
@@ -88,14 +99,16 @@ enum class PatternUsage {
     Constructor
 };
 
-class PatternASTNode {
+class PatternASTNode : public ASTNode {
 public:
+    PatternASTNode(size_t lineNum, size_t fileIndex);
+
     virtual constexpr PatternUsage patternUsage() const = 0;
 };
 
 class VariablePatternASTNode : public PatternASTNode {
 public:
-    VariablePatternASTNode(std::string binder);
+    VariablePatternASTNode(size_t lineNum, size_t fileIndex, std::string binder);
 
     constexpr PatternUsage patternUsage() const override { return PatternUsage::Variable; }
 
@@ -107,9 +120,10 @@ private:
 
 class ConstructorPatternASTNode : public PatternASTNode {
 public:
-    ConstructorPatternASTNode(std::string dataConstructor);
+    ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor);
 
-    ConstructorPatternASTNode(std::string dataConstructor, std::vector<std::unique_ptr<PatternASTNode>> &&subPatterns);
+    ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor,
+                              std::vector<std::unique_ptr<PatternASTNode>> &&subPatterns);
 
     constexpr PatternUsage patternUsage() const override { return PatternUsage::Constructor; }
 
@@ -120,13 +134,17 @@ private:
     std::vector<std::unique_ptr<PatternASTNode>> subPatterns;
 };
 
-class FunctionImplASTNode {
+class FunctionImplASTNode : public ASTNode {
 public:
-    FunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body);
+    FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body);
 
     virtual constexpr FunctionUsage functionUsage() const = 0;
 
-private:
+    constexpr const std::unique_ptr<ExpressionASTNode> &functionBody() const { return body; }
+
+    virtual void generate(const CodeGenerator &generator) const = 0;
+
+protected:
     std::unique_ptr<ExpressionASTNode> body;
 };
 
@@ -136,11 +154,21 @@ private:
  */
 class PrefixFunctionImplASTNode : public FunctionImplASTNode {
 public:
-    PrefixFunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body);
+    struct View {
+        const std::vector<std::unique_ptr<PatternASTNode>> &patterns;
+        const std::unique_ptr<ExpressionASTNode> &body;
+    };
 
-    PrefixFunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body, std::vector<std::unique_ptr<PatternASTNode>> &&patterns);
+    PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body);
+
+    PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body,
+                              std::vector<std::unique_ptr<PatternASTNode>> &&patterns);
 
     constexpr FunctionUsage functionUsage() const override { return FunctionUsage::Prefix; }
+
+    constexpr const std::vector<std::unique_ptr<PatternASTNode>> &parameterPatterns() const { return patterns; }
+
+    void generate(const CodeGenerator &generator) const override;
 
 private:
     std::vector<std::unique_ptr<PatternASTNode>> patterns;
@@ -152,9 +180,21 @@ private:
  */
 class InfixFunctionImplASTNode : public FunctionImplASTNode {
 public:
-    InfixFunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body, std::unique_ptr<PatternASTNode> &&left, std::unique_ptr<PatternASTNode> &&right);
+    struct View {
+        const std::unique_ptr<PatternASTNode> &lhs, &rhs;
+        const std::unique_ptr<ExpressionASTNode> &body;
+    };
+
+    InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body,
+                             std::unique_ptr<PatternASTNode> &&left, std::unique_ptr<PatternASTNode> &&right);
 
     constexpr FunctionUsage functionUsage() const override { return FunctionUsage::Infix; }
+
+    constexpr const std::unique_ptr<PatternASTNode> &leftPattern() const { return lhs; }
+
+    constexpr const std::unique_ptr<PatternASTNode> &rightPattern() const { return rhs; }
+
+    void generate(const CodeGenerator &generator) const override;
 
 private:
     std::unique_ptr<PatternASTNode> lhs, rhs;
@@ -163,6 +203,11 @@ private:
 
 class FunctionDefinitionASTNode {
 public:
+    struct View {
+        const std::unique_ptr<const FunctionDeclASTNode> &declaration;
+        const std::vector<const std::unique_ptr<const FunctionImplASTNode>> &implementations;
+    };
+
     FunctionDefinitionASTNode(std::unique_ptr<FunctionDeclASTNode> &&declaration);
 
     void addImplementation(std::unique_ptr<FunctionImplASTNode> &&implementation);
@@ -170,6 +215,13 @@ public:
     const std::string &name() const { return declaration->name(); }
 
     constexpr std::unique_ptr<FunctionDeclASTNode> &decl() { return declaration; }
+
+    constexpr const std::vector<std::unique_ptr<FunctionImplASTNode>> &
+    implementationVariants() const { return implementations; }
+
+    void generate(const CodeGenerator &generator) const;
+
+    bool isPolymorphic() const { return declaration->functionType()->isPolymorphic(); }
 
 private:
     std::unique_ptr<FunctionDeclASTNode> declaration;

@@ -8,8 +8,11 @@
 #include <string>
 #include <memory>
 
-class ExpressionASTNode {
+#include "ASTNode.h"
 
+class ExpressionASTNode : public ASTNode {
+public:
+    ExpressionASTNode(size_t lineNum, size_t fileIndex);
 };
 
 /*
@@ -18,7 +21,7 @@ class ExpressionASTNode {
  */
 class LambdaExpressionASTNode : public ExpressionASTNode {
 public:
-    LambdaExpressionASTNode(std::string binder, std::unique_ptr<ExpressionASTNode> &&expression);
+    LambdaExpressionASTNode(size_t lineNum, size_t fileIndex, std::string binder, std::unique_ptr<ExpressionASTNode> &&expression);
 
 private:
     std::string binder;
@@ -31,7 +34,7 @@ private:
  */
 class ApplicationASTNode : public ExpressionASTNode {
 public:
-    ApplicationASTNode(std::unique_ptr<ExpressionASTNode> &&func, std::unique_ptr<ExpressionASTNode> &&arg);
+    ApplicationASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&func, std::unique_ptr<ExpressionASTNode> &&arg);
 
 private:
     std::unique_ptr<ExpressionASTNode> function, argument;
@@ -53,7 +56,7 @@ private:
  */
 class LetBindingASTNode : public ExpressionASTNode {
 public:
-    LetBindingASTNode(std::string binder, std::unique_ptr<ExpressionASTNode> &&body,
+    LetBindingASTNode(size_t lineNum, size_t fileIndex, std::string binder, std::unique_ptr<ExpressionASTNode> &&body,
                       std::unique_ptr<ExpressionASTNode> &&usage);
 
 private:
@@ -65,7 +68,7 @@ private:
 
 class FunctionASTNode : public ExpressionASTNode {
 public:
-    FunctionASTNode(std::string name);
+    FunctionASTNode(size_t lineNum, size_t fileIndex, std::string name);
 
 private:
     std::string name;
@@ -73,7 +76,7 @@ private:
 
 class VariableASTNode : public ExpressionASTNode {
 public:
-    VariableASTNode(std::string name);
+    VariableASTNode(size_t lineNum, size_t fileIndex, std::string name);
 
 private:
     // Name of the variable
@@ -82,10 +85,34 @@ private:
 
 class ConstructorASTNode : public ExpressionASTNode {
 public:
-    ConstructorASTNode(std::string name);
+    ConstructorASTNode(size_t lineNum, size_t fileIndex, std::string name);
 
 private:
     std::string name;
+};
+
+class IntegralConstructorASTNode : public ExpressionASTNode {
+public:
+    IntegralConstructorASTNode(size_t lineNum, size_t fileIndex, long long value);
+
+private:
+    long long value;
+};
+
+class DecimalConstructorASTNode : public ExpressionASTNode {
+public:
+    DecimalConstructorASTNode(size_t lineNum, size_t fileIndex, double value);
+
+private:
+    double value;
+};
+
+class CharConstructorASTNode : public ExpressionASTNode {
+public:
+    CharConstructorASTNode(size_t lineNum, size_t fileIndex, char value);
+
+private:
+    char value;
 };
 
 #endif //HELP2_EXPRESSIONASTNODES_H

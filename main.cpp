@@ -1,35 +1,64 @@
 #include <iostream>
 #include <fstream>
 #include "include/parser/Parser.h"
+#include "include/compiler/TypeChecker.h"
+
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+
+void compilerTest() {
+    using namespace llvm;
+
+    LLVMContext ctx;
+
+    StructType *llvm_List = StructType::create(ctx, "Int32List");
+    llvm_List->setBody(IntegerType::get(ctx, 8));
+
+    StructType *llvm_List_Cons = StructType::create(ctx, "Int32List$Cons");
+    llvm_List_Cons->setBody(IntegerType::get(ctx, 8), IntegerType::get(ctx, 32),
+                            PointerType::get(llvm_List, 0));
+
+    outs() << *llvm_List << "\n";
+    outs() << *llvm_List_Cons << "\n";
+
+    /*Module *module = new Module("struct_test", ctx);
+
+    std::string targetTriple = sys::getDefaultTargetTriple();
+    std::cout << "Target triple: " << targetTriple << std::endl;
+    module->setTargetTriple(targetTriple);
+
+    InitializeAllTargetInfos();
+    InitializeAllTargets();
+    InitializeAllTargetMCs();
+    InitializeAllAsmParsers();
+    InitializeAllAsmPrinters();
+
+    std::string error;
+    const Target *target = TargetRegistry::lookupTarget(targetTriple, error);
+
+    if (!target) {
+        std::cerr << error << std::endl;
+        return;
+    }
+    std::string cpu = "generic";
+    std::string features;
+
+    TargetOptions opt;
+    Optional<Reloc::Model> rm = Optional<Reloc::Model>();
+    TargetMachine *targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
+
+    module->setDataLayout(targetMachine->createDataLayout());*/
+}
 
 int main(int argc, char *argv[]) {
-//    Context ctx;
-//    InfixType &functionType = ctx.createInfixType("->", ParameterPlaceholder("a"), ParameterPlaceholder("b"));
-//    PrefixType &numberType = ctx.createPrefixType("Num");
-//    PrefixType &eitherType = ctx.createPrefixType("Either", {ParameterPlaceholder("a"), ParameterPlaceholder("b")});
-//
-//    InfixTypeInstance functionInstance(
-//            *ctx.getType("->"),
-//            InfixTypeInstance(functionType, PrefixTypeInstance(numberType), PolymorphicTypeInstance("b")),
-//            InfixTypeInstance(functionType, PolymorphicTypeInstance("a"), PolymorphicTypeInstance("b"))
-//    );
-//
-//    PrefixTypeInstance numberInstance(numberType);
-//
-//    std::vector<std::unique_ptr<TypeInstance>> params;
-//    params.push_back(std::make_unique<InfixTypeInstance>(functionType, PrefixTypeInstance(numberType),
-//                                                         PrefixTypeInstance(numberType)));
-//    params.push_back(std::make_unique<PrefixTypeInstance>(numberType));
-//
-//    PrefixTypeInstance eitherInstance(eitherType, std::move(params));
-//
-//    std::cout << functionInstance << std::endl;
-//    std::cout << numberInstance << std::endl;
-//    std::cout << eitherInstance << std::endl;
-//
-//    Context ctx;
-//
-//    PrefixType &numberType = ctx.createPrefixType("Num");
+    compilerTest();
+
+    return 0;
 
     if (argc < 2) {
         std::cout << "No source files specified." << std::endl;
@@ -47,10 +76,18 @@ int main(int argc, char *argv[]) {
 
         Parser parser(Tokeniser(std::string(argv[1]), sourceString));
 
-        if (std::unique_ptr<ParseTree> tree = parser.parse()) {
-            std::cout << "Success!" << std::endl;
+        std::unique_ptr<ParseTree> tree = std::make_unique<ParseTree>();
+        tree = parser.parse(std::move(tree));
+
+        if (!tree) {
+            return 0;
         }
 
+        TypeChecker typeChecker(tree);
+
+        if (typeChecker.typeCheck()) {
+            std::cout << "Success!" << std::endl;
+        }
     } else {
         std::cout << "Failed to open source file: '" << argv[1] << "'." << std::endl;
     }

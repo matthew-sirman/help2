@@ -3,18 +3,21 @@
 //
 
 #include "../../../include/parser/ast/FunctionASTNodes.h"
+#include "../../../include/compiler/CodeGenerator.h"
 
 #include <utility>
+#include <llvm/IR/Type.h>
 
 
-FunctionDeclASTNode::FunctionDeclASTNode(std::string name, std::unique_ptr<TypeInstanceASTNode> &&funcType)
-        : funcName(std::move(name)), funcType(std::move(funcType)) {
+FunctionDeclASTNode::FunctionDeclASTNode(size_t lineNum, size_t fileIndex, std::string name,
+                                         std::unique_ptr<TypeInstanceASTNode> &&funcType)
+        : ASTNode(lineNum, fileIndex), funcName(std::move(name)), funcType(std::move(funcType)) {
 
 }
 
-PrefixFunctionDeclASTNode::PrefixFunctionDeclASTNode(const std::string &name,
+PrefixFunctionDeclASTNode::PrefixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
                                                      std::unique_ptr<TypeInstanceASTNode> &&funcType)
-        : FunctionDeclASTNode(name, std::move(funcType)) {
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(funcType)) {
 
 }
 
@@ -25,61 +28,78 @@ size_t PrefixFunctionDeclASTNode::maxArgs() const {
     // For as long as the right type of the function type is a function type, increment the counter and recurse
     while (curType->right()->typeUsage() == TypeUsage::Function) {
         m++;
-        curType = dynamic_cast<const FunctionTypeInstanceASTNode *>(curType->right());
+        curType = dynamic_cast<const FunctionTypeInstanceASTNode *>(curType->right().get());
     }
     return m;
 }
 
-InfixFunctionDeclASTNode::InfixFunctionDeclASTNode(const std::string &name,
+InfixFunctionDeclASTNode::InfixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
                                                    std::unique_ptr<TypeInstanceASTNode> &&funcType,
                                                    int precedence, Associativity assoc)
-        : FunctionDeclASTNode(name, std::move(funcType)), precedence(precedence), assoc(assoc) {
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(funcType)), precedence(precedence), assoc(assoc) {
 
 }
 
-ValueFunctionDeclASTNode::ValueFunctionDeclASTNode(const std::string &name,
+ValueFunctionDeclASTNode::ValueFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
                                                    std::unique_ptr<TypeInstanceASTNode> &&valueType)
-        : FunctionDeclASTNode(name, std::move(valueType)) {
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(valueType)) {
 
 }
 
-VariablePatternASTNode::VariablePatternASTNode(std::string binder)
-        : binderName(std::move(binder)) {
+PatternASTNode::PatternASTNode(size_t lineNum, size_t fileIndex)
+        : ASTNode(lineNum, fileIndex) {
 
 }
 
-ConstructorPatternASTNode::ConstructorPatternASTNode(std::string dataConstructor)
-        : dataConstructorName(std::move(dataConstructor)) {
+VariablePatternASTNode::VariablePatternASTNode(size_t lineNum, size_t fileIndex, std::string binder)
+        : PatternASTNode(lineNum, fileIndex), binderName(std::move(binder)) {
 
 }
 
-ConstructorPatternASTNode::ConstructorPatternASTNode(std::string dataConstructor,
+ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor)
+        : PatternASTNode(lineNum, fileIndex), dataConstructorName(std::move(dataConstructor)) {
+
+}
+
+ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor,
                                                      std::vector<std::unique_ptr<PatternASTNode>> &&subPatterns)
-        : dataConstructorName(std::move(dataConstructor)), subPatterns(std::move(subPatterns)) {
+        : PatternASTNode(lineNum, fileIndex), dataConstructorName(std::move(dataConstructor)),
+          subPatterns(std::move(subPatterns)) {
 
 }
 
-FunctionImplASTNode::FunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body)
-        : body(std::move(body)) {
+FunctionImplASTNode::FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body)
+        : ASTNode(lineNum, fileIndex), body(std::move(body)) {
 
 }
 
-PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body)
-        : FunctionImplASTNode(std::move(body)) {
+PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
+                                                     std::unique_ptr<ExpressionASTNode> &&body)
+        : FunctionImplASTNode(lineNum, fileIndex, std::move(body)) {
 
 }
 
-PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body,
+PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
+                                                     std::unique_ptr<ExpressionASTNode> &&body,
                                                      std::vector<std::unique_ptr<PatternASTNode>> &&patterns)
-        : FunctionImplASTNode(std::move(body)), patterns(std::move(patterns)) {
+        : FunctionImplASTNode(lineNum, fileIndex, std::move(body)), patterns(std::move(patterns)) {
 
 }
 
-InfixFunctionImplASTNode::InfixFunctionImplASTNode(std::unique_ptr<ExpressionASTNode> &&body,
+void PrefixFunctionImplASTNode::generate(const CodeGenerator &generator) const {
+    generator.generate<PrefixFunctionImplASTNode>(View { .patterns = patterns, .body = body });
+}
+
+InfixFunctionImplASTNode::InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
+                                                   std::unique_ptr<ExpressionASTNode> &&body,
                                                    std::unique_ptr<PatternASTNode> &&left,
                                                    std::unique_ptr<PatternASTNode> &&right)
-        : FunctionImplASTNode(std::move(body)), lhs(std::move(left)), rhs(std::move(right)) {
+        : FunctionImplASTNode(lineNum, fileIndex, std::move(body)), lhs(std::move(left)), rhs(std::move(right)) {
 
+}
+
+void InfixFunctionImplASTNode::generate(const CodeGenerator &generator) const {
+    generator.generate<InfixFunctionImplASTNode>(View { .lhs = lhs, .rhs = rhs, .body = body });
 }
 
 FunctionDefinitionASTNode::FunctionDefinitionASTNode(std::unique_ptr<FunctionDeclASTNode> &&declaration)
@@ -89,5 +109,43 @@ FunctionDefinitionASTNode::FunctionDefinitionASTNode(std::unique_ptr<FunctionDec
 
 void FunctionDefinitionASTNode::addImplementation(std::unique_ptr<FunctionImplASTNode> &&implementation) {
     implementations.push_back(std::move(implementation));
+}
+
+void FunctionDefinitionASTNode::generate(const CodeGenerator &generator) const {
+    std::vector<std::unique_ptr<llvm::Function>> impls;
+    impls.reserve(implementations.size());
+
+    TypeInstanceASTNode *typeNode = declaration->functionType().get();
+    std::vector<llvm::Type *> argTypes;
+
+    /*while (true) {
+        if (typeNode->typeUsage() == TypeUsage::Function) {
+            FunctionTypeInstanceASTNode *fTypeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(typeNode);
+            typeNode = fTypeNode->right().get();
+            // argTypes.push_back(fTypeNode->left().)
+        } else {
+
+        }
+        switch (typeNode->typeUsage()) {
+            case TypeUsage::Infix:
+                break;
+            case TypeUsage::Prefix:
+                break;
+            case TypeUsage::Function:
+                break;
+            case TypeUsage::Polymorphic:
+                break;
+        }
+    }*/
+
+    // llvm::FunctionType *ty = llvm::FunctionType::get(llvm::Type::getPo);
+
+    /*std::transform(implementations.begin(), implementations.end(), impls.begin(),
+                   [ty, &context](const std::unique_ptr<FunctionImplASTNode> &impl) {
+        return impl->generate(context,std::unique_ptr<llvm::Function>(llvm::Function::Create(
+                ty, llvm::Function::ExternalLinkage,
+                "", context.module("").get()
+        )));
+    });*/
 }
 

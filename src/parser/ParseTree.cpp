@@ -16,16 +16,18 @@ ParseTree::addFunctionImplementation(const std::string &func, std::unique_ptr<Fu
     definedFunctionNodes[func]->addImplementation(std::move(implementation));
 }
 
-void ParseTree::addTypeDeclaration(std::unique_ptr<TypeDeclASTNode> &&declaration) {
-    declaredTypeNodes[declaration->typeName()] = std::move(declaration);
+const std::unique_ptr<TypeDeclASTNode> &ParseTree::addTypeDeclaration(std::unique_ptr<TypeDeclASTNode> &&declaration) {
+    std::string typeName = declaration->typeName();
+    declaredTypeNodes[typeName] = std::move(declaration);
+    return declaredTypeNodes[typeName];
 }
 
-void ParseTree::addDataConstructor(const std::string &type, std::unique_ptr<DataConstructorASTNode> &&constructor) {
-    if (!typeExists(type)) {
+void ParseTree::addDataConstructor(const std::unique_ptr<TypeDeclASTNode> &type, std::unique_ptr<DataConstructorASTNode> &&constructor) {
+    if (!typeExists(type->typeName())) {
         throw;
     }
     declaredDataConstructors[constructor->name()] = constructor.get();
-    declaredTypeNodes[type]->addDataConstructor(std::move(constructor));
+    declaredTypeNodes[type->typeName()]->addDataConstructor(std::move(constructor));
 }
 
 bool ParseTree::functionExists(const std::string &name) const {
@@ -50,4 +52,27 @@ const std::unique_ptr<TypeDeclASTNode> &ParseTree::getTypeByName(const std::stri
 
 const DataConstructorASTNode *ParseTree::getConstructorByName(const std::string &name) const {
     return declaredDataConstructors.at(name);
+}
+
+const std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> &ParseTree::types() const {
+    return declaredTypeNodes;
+}
+
+const std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> &ParseTree::functions() const {
+    return definedFunctionNodes;
+}
+
+size_t ParseTree::addFile(const std::string &fileName) {
+    // Add this file to the back of the vector
+    fileLookup.push_back(fileName);
+    // Return the index of this file and increment the counter
+    return fileIndex++;
+}
+
+const std::string &ParseTree::getFileName(size_t fileIdx) const {
+    return fileLookup[fileIdx];
+}
+
+void ParseTree::markAsTypeChecked() {
+    typeChecked = true;
 }
