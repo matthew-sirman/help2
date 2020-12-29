@@ -11,7 +11,7 @@
 #include "TypeASTNodes.h"
 #include "ExpressionASTNodes.h"
 
-class CodeGenerator;
+class FunctionCodeGenerator;
 
 enum class FunctionUsage {
     Prefix,
@@ -51,10 +51,7 @@ public:
     size_t maxArgs() const override;
 };
 
-enum class Associativity {
-    Left = 1,
-    Right = -1
-};
+enum class Associativity;
 
 /*
  * Infix Function declaration syntax:
@@ -94,55 +91,23 @@ public:
     constexpr size_t maxArgs() const override { return 0; }
 };
 
-enum class PatternUsage {
-    Variable,
-    Constructor
-};
-
-class PatternASTNode : public ASTNode {
-public:
-    PatternASTNode(size_t lineNum, size_t fileIndex);
-
-    virtual constexpr PatternUsage patternUsage() const = 0;
-};
-
-class VariablePatternASTNode : public PatternASTNode {
-public:
-    VariablePatternASTNode(size_t lineNum, size_t fileIndex, std::string binder);
-
-    constexpr PatternUsage patternUsage() const override { return PatternUsage::Variable; }
-
-    constexpr const std::string &name() const { return binderName; }
-
-private:
-    std::string binderName;
-};
-
-class ConstructorPatternASTNode : public PatternASTNode {
-public:
-    ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor);
-
-    ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor,
-                              std::vector<std::unique_ptr<PatternASTNode>> &&subPatterns);
-
-    constexpr PatternUsage patternUsage() const override { return PatternUsage::Constructor; }
-
-    constexpr const std::string &constructorName() const { return dataConstructorName; }
-
-private:
-    std::string dataConstructorName;
-    std::vector<std::unique_ptr<PatternASTNode>> subPatterns;
-};
-
 class FunctionImplASTNode : public ASTNode {
 public:
+    struct View {
+        const std::vector<PatternASTNode *> &patterns;
+        const std::unique_ptr<ExpressionASTNode> &body;
+        unsigned variant;
+        llvm::Function *parentFunction;
+    };
+
     FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body);
 
     virtual constexpr FunctionUsage functionUsage() const = 0;
 
     constexpr const std::unique_ptr<ExpressionASTNode> &functionBody() const { return body; }
 
-    virtual void generate(const CodeGenerator &generator) const = 0;
+    virtual llvm::BasicBlock *generate(FunctionCodeGenerator &generator, unsigned variant,
+                                       llvm::Function *parentFunction) const = 0;
 
 protected:
     std::unique_ptr<ExpressionASTNode> body;
@@ -154,11 +119,6 @@ protected:
  */
 class PrefixFunctionImplASTNode : public FunctionImplASTNode {
 public:
-    struct View {
-        const std::vector<std::unique_ptr<PatternASTNode>> &patterns;
-        const std::unique_ptr<ExpressionASTNode> &body;
-    };
-
     PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body);
 
     PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body,
@@ -168,7 +128,8 @@ public:
 
     constexpr const std::vector<std::unique_ptr<PatternASTNode>> &parameterPatterns() const { return patterns; }
 
-    void generate(const CodeGenerator &generator) const override;
+    llvm::BasicBlock *generate(FunctionCodeGenerator &generator, unsigned variant,
+                               llvm::Function *parentFunction) const override;
 
 private:
     std::vector<std::unique_ptr<PatternASTNode>> patterns;
@@ -180,11 +141,6 @@ private:
  */
 class InfixFunctionImplASTNode : public FunctionImplASTNode {
 public:
-    struct View {
-        const std::unique_ptr<PatternASTNode> &lhs, &rhs;
-        const std::unique_ptr<ExpressionASTNode> &body;
-    };
-
     InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body,
                              std::unique_ptr<PatternASTNode> &&left, std::unique_ptr<PatternASTNode> &&right);
 
@@ -194,7 +150,8 @@ public:
 
     constexpr const std::unique_ptr<PatternASTNode> &rightPattern() const { return rhs; }
 
-    void generate(const CodeGenerator &generator) const override;
+    llvm::BasicBlock *generate(FunctionCodeGenerator &generator, unsigned variant,
+                               llvm::Function *parentFunction) const override;
 
 private:
     std::unique_ptr<PatternASTNode> lhs, rhs;
@@ -204,8 +161,9 @@ private:
 class FunctionDefinitionASTNode {
 public:
     struct View {
-        const std::unique_ptr<const FunctionDeclASTNode> &declaration;
-        const std::vector<const std::unique_ptr<const FunctionImplASTNode>> &implementations;
+        const std::unique_ptr<FunctionDeclASTNode> &declaration;
+        const std::vector<std::unique_ptr<FunctionImplASTNode>> &implementations;
+        bool hasOverloads;
     };
 
     FunctionDefinitionASTNode(std::unique_ptr<FunctionDeclASTNode> &&declaration);
@@ -219,9 +177,11 @@ public:
     constexpr const std::vector<std::unique_ptr<FunctionImplASTNode>> &
     implementationVariants() const { return implementations; }
 
-    void generate(const CodeGenerator &generator) const;
+    llvm::Function *generate(FunctionCodeGenerator &generator, const BindingMap &bindingMap) const;
 
     bool isPolymorphic() const { return declaration->functionType()->isPolymorphic(); }
+
+    bool hasOverloads() const { return implementations.size() > 1; }
 
 private:
     std::unique_ptr<FunctionDeclASTNode> declaration;

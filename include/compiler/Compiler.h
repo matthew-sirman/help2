@@ -5,14 +5,20 @@
 #ifndef HELP2_COMPILER_H
 #define HELP2_COMPILER_H
 
+#include <optional>
+
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
 
 #include "../parser/ParseTree.h"
+#include "CodeGenerator.h"
+
+class Compiler;
 
 class CompileContext {
+    friend class Compiler;
 public:
-    CompileContext();
+    CompileContext(std::unique_ptr<ParseTree> &&tree);
 
     constexpr const std::unique_ptr<llvm::LLVMContext> &context() const { return ctxContext; }
 
@@ -20,10 +26,43 @@ public:
 
     const std::unique_ptr<llvm::Module> &module(const std::string &name) const { return ctxModules.at(name); }
 
+    void setCurrentModule(const std::string &name);
+
+    constexpr const std::unique_ptr<llvm::Module> &currentModule() const { return *ctxCurrentModule; }
+
+    constexpr const std::unique_ptr<ParseTree> &parseTree() const { return tree; }
+
+    void addInstantiatedType(const std::string &name, llvm::Type *type);
+
+    void addConstructorType(const std::string &name, llvm::Type *type);
+
+    llvm::Type *lookupType(const std::string &name) const;
+
+    llvm::Type *lookupConstructor(const std::string &name) const;
+
+    // Helpers
+    llvm::IntegerType *int8Type() const;
+
+    llvm::IntegerType *int16Type() const;
+
+    llvm::IntegerType *int32Type() const;
+
+    llvm::IntegerType *int64Type() const;
+
+    llvm::FunctionType *intBinaryOpType() const;
+
+    llvm::ConstantInt *intValue(long long val) const;
+
 private:
     std::unique_ptr<llvm::LLVMContext> ctxContext;
     std::unique_ptr<llvm::IRBuilder<>> ctxBuilder;
     std::unordered_map<std::string, std::unique_ptr<llvm::Module>> ctxModules;
+    const std::unique_ptr<llvm::Module> *ctxCurrentModule;
+
+    std::unique_ptr<ParseTree> tree;
+
+    std::unordered_map<std::string, llvm::Type *> instantiatedTypes;
+    std::unordered_map<std::string, llvm::Type *> instantiatedConstructors;
 };
 
 /*
@@ -33,14 +72,12 @@ private:
  */
 class Compiler {
 public:
-    explicit Compiler(std::unique_ptr<ParseTree> &&tree, const std::string &moduleName);
+    explicit Compiler(std::unique_ptr<ParseTree> &&tree);
 
     void compile();
 
-private:
+//private:
     CompileContext context;
-
-    std::unique_ptr<ParseTree> tree;
 };
 
 #endif //HELP2_COMPILER_H

@@ -5,6 +5,11 @@
 #include "../../include/parser/Parser.h"
 #include "../../include/parser/ParseTree.h"
 
+ParseTree::ParseTree(Core &&coreModule)
+        : langCore(std::move(coreModule)) {
+
+}
+
 void ParseTree::addFunctionDeclaration(std::unique_ptr<FunctionDeclASTNode> &&declaration) {
     std::unique_ptr<FunctionDefinitionASTNode> function = std::make_unique<FunctionDefinitionASTNode>(std::move(declaration));
 
@@ -62,15 +67,19 @@ const std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>
     return definedFunctionNodes;
 }
 
-size_t ParseTree::addFile(const std::string &fileName) {
-    // Add this file to the back of the vector
-    fileLookup.push_back(fileName);
+size_t ParseTree::addFile(const std::filesystem::path &fileName) {
+    // Add this module to the back of the vector
+    modules.push_back({ .fileName = fileName, .moduleName = fileName.filename().replace_extension() });
     // Return the index of this file and increment the counter
     return fileIndex++;
 }
 
-const std::string &ParseTree::getFileName(size_t fileIdx) const {
-    return fileLookup[fileIdx];
+const std::filesystem::path &ParseTree::getFilePath(size_t fileIdx) const {
+    return modules[fileIdx].fileName;
+}
+
+const std::string &ParseTree::getModuleName(size_t fileIdx) const {
+    return modules[fileIdx].moduleName;
 }
 
 void ParseTree::markAsTypeChecked() {

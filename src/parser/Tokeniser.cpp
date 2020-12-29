@@ -50,22 +50,6 @@ Token Tokeniser::nextToken() {
 
     // Check for single character tokens (and any other symbolic tokens which start with
     // a character from the single character token set)
-    if (*position == '(') {
-        position++;
-        if (position != source.end() && *position == ')') {
-            curToken = "()";
-            position++;
-            return curTokenType = Token::Unit;
-        } else {
-            curToken = "(";
-            return curTokenType = Token::OpenParenthesis;
-        }
-    }
-    if (*position == ')') {
-        curToken = ")";
-        position++;
-        return curTokenType = Token::CloseParenthesis;
-    }
     if (*position == ';') {
         curToken = ";";
         position++;
@@ -95,13 +79,29 @@ Token Tokeniser::nextToken() {
     }
     if (std::regex_search(position.base(), operatorMatch, std::regex(R"(^\((\+|-(?!>)|\*|/|%|\.)\))"))) {
         curToken = operatorMatch[1].str();
-        position += operatorMatch.size();
+        position += curToken.size() + 2;
         return curTokenType = Token::SpecialPrefixOperator;
     }
     if (std::regex_search(position.base(), std::regex("^->"))) {
         curToken = "->";
         position += 2;
         return curTokenType = Token::FuncType;
+    }
+    if (*position == '(') {
+        position++;
+        if (position != source.end() && *position == ')') {
+            curToken = "()";
+            position++;
+            return curTokenType = Token::Unit;
+        } else {
+            curToken = "(";
+            return curTokenType = Token::OpenParenthesis;
+        }
+    }
+    if (*position == ')') {
+        curToken = ")";
+        position++;
+        return curTokenType = Token::CloseParenthesis;
     }
     if (*position == '[') {
         position++;

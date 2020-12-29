@@ -45,17 +45,17 @@ private:
                                                                       const std::unordered_set<std::string> &polyTypes);
 
     std::unique_ptr<PatternASTNode> parsePattern(const std::unique_ptr<ParseTree> &tree,
-                                                 std::unordered_set<std::string> &usedBinders);
+                                                 BinderMap &usedBinders);
 
     std::unique_ptr<ExpressionASTNode> parseExpression(const std::unique_ptr<ParseTree> &tree,
-                                                       const std::unordered_set<std::string> &binders,
+                                                       const BinderMap &binders,
                                                        int currentPrecedence);
 
     std::unique_ptr<LetBindingASTNode> parseLetBinding(const std::unique_ptr<ParseTree> &tree,
-                                                       const std::unordered_set<std::string> &binders);
+                                                       const BinderMap &binders);
 
     std::unique_ptr<LambdaExpressionASTNode> parseLambda(const std::unique_ptr<ParseTree> &tree,
-                                                         const std::unordered_set<std::string> &binders);
+                                                         const BinderMap &binders);
 
     void logError(const std::string &message);
 

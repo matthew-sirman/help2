@@ -6,17 +6,25 @@
 #define HELP2_PARSETREE_H
 
 #include <unordered_map>
+#include <filesystem>
 
 #include "ast/ExpressionASTNodes.h"
 #include "ast/TypeASTNodes.h"
 #include "ast/FunctionASTNodes.h"
+
+#include "../lang/core/Core.h"
 
 class TypeChecker;
 
 class ParseTree {
     friend class TypeChecker;
 public:
-    ParseTree() = default;
+    struct Module {
+        const std::filesystem::path fileName;
+        std::string moduleName;
+    };
+
+    ParseTree(Core &&coreModule);
 
     void addFunctionDeclaration(std::unique_ptr<FunctionDeclASTNode> &&declaration);
 
@@ -42,11 +50,17 @@ public:
 
     const std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> &functions() const;
 
-    size_t addFile(const std::string &fileName);
+    size_t addFile(const std::filesystem::path &fileName);
 
-    const std::string &getFileName(size_t fileIdx) const;
+    const std::filesystem::path &getFilePath(size_t fileIdx) const;
+
+    const std::string &getModuleName(size_t fileIdx) const;
+
+    constexpr const std::vector<Module> &allModules() const { return modules; }
 
     constexpr bool isTypeChecked() const { return typeChecked; }
+
+    constexpr Core &core() { return langCore; }
 
 private:
     std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> declaredTypeNodes;
@@ -54,11 +68,13 @@ private:
     std::unordered_map<std::string, DataConstructorASTNode *> declaredDataConstructors;
 
     size_t fileIndex = 0;
-    std::vector<std::string> fileLookup;
+    std::vector<Module> modules;
 
     void markAsTypeChecked();
 
-    bool typeChecked;
+    bool typeChecked = false;
+
+    Core langCore;
 };
 
 #endif //HELP2_PARSETREE_H

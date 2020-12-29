@@ -75,6 +75,7 @@ bool TypeChecker::typeCheckConstructor(const std::unique_ptr<DataConstructorASTN
         }
         case TypeUsage::Function:
         case TypeUsage::Polymorphic:
+        case TypeUsage::Primitive:
             // These cases should never occur
             logError("DEVELOPER: Invalid constructor usage!");
             return false;
@@ -84,12 +85,15 @@ bool TypeChecker::typeCheckConstructor(const std::unique_ptr<DataConstructorASTN
 
 bool TypeChecker::typeCheckTypeInstance(const std::unique_ptr<TypeInstanceASTNode> &instance) const {
     switch (instance->typeUsage()) {
+        case TypeUsage::Primitive:
+            // We can assume a primitive is always correctly typed
+            return true;
         case TypeUsage::Prefix: {
             const PrefixTypeInstanceASTNode *prefixInstance = dynamic_cast<PrefixTypeInstanceASTNode *>(instance.get());
 
             // Fail if applied to an invalid number of arguments
             if (tree->getTypeByName(prefixInstance->typeName())->args() != prefixInstance->parameters().size()) {
-                logError("Invalid number of arguments for type '" + prefixInstance->typeName() + "'.", instance.get());
+                logError("Invalid number of arguments for type '" + prefixInstance->typeName() + "'.", prefixInstance);
                 return false;
             }
 
@@ -119,7 +123,7 @@ bool TypeChecker::typeCheckFunctionImplementation(const std::unique_ptr<Function
     switch (impl->functionUsage()) {
         case FunctionUsage::Prefix: {
             PrefixFunctionImplASTNode *prefixImpl = dynamic_cast<PrefixFunctionImplASTNode *>(impl.get());
-            FunctionTypeInstanceASTNode *typeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(type.get());
+            TypeInstanceASTNode *typeNode = type.get();
 
             const std::vector<std::unique_ptr<PatternASTNode>> &patterns = prefixImpl->parameterPatterns();
 
@@ -127,39 +131,37 @@ bool TypeChecker::typeCheckFunctionImplementation(const std::unique_ptr<Function
             // by the left branch of the type node, and at each stage, we recurse down the right branch.
             for (std::vector<std::unique_ptr<PatternASTNode>>::const_iterator it = patterns.begin();
                  it != patterns.end(); ++it) {
-                if (!typeCheckPattern(*it, typeNode->left())) {
+                FunctionTypeInstanceASTNode *fTypeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(typeNode);
+                if (!typeCheckPattern(*it, fTypeNode->left().get())) {
                     return false;
                 }
-                // Don't recurse down the final right subtree
-                if (it != patterns.end() - 1) {
-                    typeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(typeNode->right().get());
-                } else {
-                    return typeCheckExpression(impl->functionBody(), typeNode->right());
-                }
+                typeNode = fTypeNode->right().get();
             }
+
+            return typeCheckExpression(impl->functionBody(), typeNode);
         }
         case FunctionUsage::Infix: {
             InfixFunctionImplASTNode *infixImpl = dynamic_cast<InfixFunctionImplASTNode *>(impl.get());
             FunctionTypeInstanceASTNode *typeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(type.get());
 
-            if (!typeCheckPattern(infixImpl->leftPattern(), typeNode->left())) {
+            if (!typeCheckPattern(infixImpl->leftPattern(), typeNode->left().get())) {
                 return false;
             }
             typeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(typeNode->right().get());
-            if (!typeCheckPattern(infixImpl->rightPattern(), typeNode->left())) {
+            if (!typeCheckPattern(infixImpl->rightPattern(), typeNode->left().get())) {
                 return false;
             }
 
-            return typeCheckExpression(impl->functionBody(), typeNode->right());
+            return typeCheckExpression(impl->functionBody(), typeNode->right().get());
         }
         case FunctionUsage::Value:
-            return typeCheckExpression(impl->functionBody(), type);
+            return typeCheckExpression(impl->functionBody(), type.get());
     }
     return false;
 }
 
 bool TypeChecker::typeCheckPattern(const std::unique_ptr<PatternASTNode> &pattern,
-                                   const std::unique_ptr<TypeInstanceASTNode> &type) const {
+                                   TypeInstanceASTNode *type) const {
     switch (pattern->patternUsage()) {
         case PatternUsage::Variable:
             // A variable matches any type, so return true
@@ -175,7 +177,7 @@ bool TypeChecker::typeCheckPattern(const std::unique_ptr<PatternASTNode> &patter
 }
 
 bool TypeChecker::typeCheckExpression(const std::unique_ptr<ExpressionASTNode> &expr,
-                                      const std::unique_ptr<TypeInstanceASTNode> &type) const {
+                                      TypeInstanceASTNode *type) const {
     return false;
 }
 
@@ -184,7 +186,7 @@ void TypeChecker::logError(const std::string &message) const {
 }
 
 void TypeChecker::logError(const std::string &message, const ASTNode *node) const {
-    std::cerr << "[Type Error] " << tree->getFileName(node->fileIndex()) << " (line " << node->lineNumber()
+    std::cerr << "[Type Error] " << tree->getFilePath(node->fileIndex()) << " (line " << node->lineNumber()
               << "): " << message << std::endl;
 
 }

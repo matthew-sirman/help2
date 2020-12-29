@@ -3,7 +3,7 @@
 //
 
 #include "../../../include/parser/ast/TypeASTNodes.h"
-#include "../../../include/compiler/Compiler.h"
+#include "../../../include/compiler/CodeGenerator.h"
 
 #include <iostream>
 
@@ -29,8 +29,24 @@ PrefixDataConstructorASTNode::PrefixDataConstructorASTNode(size_t lineNum, size_
 
 }
 
-void PrefixDataConstructorASTNode::generate(const CompileContext &context) {
+llvm::Type *
+PrefixDataConstructorASTNode::generate(TypeCodeGenerator &generator, const std::string &name, unsigned char tagSize,
+                                       unsigned short tag, const BindingMap &bindingMap) const {
+    std::vector<TypeInstanceASTNode *> unboxedParams(params.size());
+    std::transform(params.begin(), params.end(), unboxedParams.begin(),
+                   [](const std::unique_ptr<TypeInstanceASTNode> &param) {
+                       return param.get();
+                   });
 
+    return generator.generate<DataConstructorASTNode>(View{
+            .type = type,
+            .constructorName = constructorName,
+            .params = unboxedParams,
+            .uniqueTypeName = name,
+            .tagSize = tagSize,
+            .tag = tag,
+            .bindingMap = bindingMap
+    });
 }
 
 InfixDataConstructorASTNode::InfixDataConstructorASTNode(size_t lineNum, size_t fileIndex,
@@ -43,8 +59,18 @@ InfixDataConstructorASTNode::InfixDataConstructorASTNode(size_t lineNum, size_t 
 
 }
 
-void InfixDataConstructorASTNode::generate(const CompileContext &context) {
-
+llvm::Type *
+InfixDataConstructorASTNode::generate(TypeCodeGenerator &generator, const std::string &name, unsigned char tagSize,
+                                      unsigned short tag, const BindingMap &bindingMap) const {
+    return generator.generate<DataConstructorASTNode>(View{
+            .type = type,
+            .constructorName = constructorName,
+            .params = {lhs.get(), rhs.get()},
+            .uniqueTypeName = name,
+            .tagSize = tagSize,
+            .tag = tag,
+            .bindingMap = bindingMap
+    });
 }
 
 TypeDeclASTNode::TypeDeclASTNode(size_t lineNum, size_t fileIndex, std::string name)
@@ -62,35 +88,6 @@ void TypeDeclASTNode::addDataConstructor(std::unique_ptr<DataConstructorASTNode>
     constructors.push_back(std::move(constructor));
 }
 
-void TypeDeclASTNode::generate(const CompileContext &context) const {
-    // If there are 1 or 0 data constructors, we have a special case
-    if (constructors.empty()) {
-        // The type is not constructable, so simply return
-        return;
-    }
-
-    if (constructors.size() == 1) {
-        // The type only has a single constructor, so we don't need to tag it
-        context
-    }
-
-    // Otherwise, create a master type and a tagged union for each ctor
-
-    unsigned char tagSize;
-
-    if (constructors.size() < 256) {
-        tagSize = 8;
-    } else if (constructors.size() < 65536) {
-        tagSize = 16;
-    }
-
-    std::for_each(constructors.begin(), constructors.end(),
-                  [&context](const std::unique_ptr<DataConstructorASTNode> &cons) {
-                      cons->generate(context);
-                  }
-    );
-}
-
 PrefixTypeDeclASTNode::PrefixTypeDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
                                              std::vector<std::string> &&typeVariables)
         : TypeDeclASTNode(lineNum, fileIndex, name), typeConstructorParameters(std::move(typeVariables)) {
@@ -103,6 +100,22 @@ PrefixTypeDeclASTNode::PrefixTypeDeclASTNode(size_t lineNum, size_t fileIndex, c
         : TypeDeclASTNode(lineNum, fileIndex, name, std::move(constructors)),
           typeConstructorParameters(std::move(typeVariables)) {
 
+}
+
+llvm::Type *PrefixTypeDeclASTNode::generate(TypeCodeGenerator &generator) const {
+    std::vector<llvm::Type *> bindings;
+    return generate(generator, bindings);
+}
+
+llvm::Type *
+PrefixTypeDeclASTNode::generate(TypeCodeGenerator &generator, const std::vector<llvm::Type *> &bindings) const {
+    return generator.generate<TypeDeclASTNode>(View{
+            .fileIndex = fileIndex(),
+            .name = name,
+            .constructors = constructors,
+            .typeConstructorParameters = typeConstructorParameters,
+            .bindings = bindings
+    });
 }
 
 InfixTypeDeclASTNode::InfixTypeDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name, std::string left,
@@ -119,28 +132,45 @@ InfixTypeDeclASTNode::InfixTypeDeclASTNode(size_t lineNum, size_t fileIndex, con
 
 }
 
-TypeInstanceASTNode::TypeInstanceASTNode(size_t lineNum, size_t fileIndex, std::string name)
+llvm::Type *
+InfixTypeDeclASTNode::generate(TypeCodeGenerator &generator, llvm::Type *leftBinding, llvm::Type *rightBinding) const {
+    return generator.generate<TypeDeclASTNode>(View{
+            .fileIndex = fileIndex(),
+            .name = name,
+            .constructors = constructors,
+            .typeConstructorParameters = {leftParameter, rightParameter},
+            .bindings = {leftBinding, rightBinding}
+    });
+}
+
+TypeInstanceASTNode::TypeInstanceASTNode() = default;
+
+UserTypeInstanceASTNode::UserTypeInstanceASTNode(size_t lineNum, size_t fileIndex, std::string name)
         : ASTNode(lineNum, fileIndex), name(std::move(name)) {
 
 }
 
 PolymorphicTypeInstanceASTNode::PolymorphicTypeInstanceASTNode(size_t lineNum, size_t fileIndex,
                                                                const std::string &name)
-        : TypeInstanceASTNode(lineNum, fileIndex, name) {
+        : UserTypeInstanceASTNode(lineNum, fileIndex, name) {
 
-}
-
-llvm::Type *PolymorphicTypeInstanceASTNode::llvmType() const {
-    std::cerr << "DEVELOPER: Tried to extract concrete type from polymorphic type" << std::endl;
-    throw;
 }
 
 bool PolymorphicTypeInstanceASTNode::isPolymorphic() const {
     return true;
 }
 
+llvm::Type *
+PolymorphicTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const {
+    if (bindingMap.contains(name)) {
+        return bindingMap.at(name);
+    }
+    std::cerr << "DEVELOPER: Attempted to generate dependencies on polymorphic type instance." << std::endl;
+    throw;
+}
+
 InfixTypeInstanceASTNode::InfixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name)
-        : TypeInstanceASTNode(lineNum, fileIndex, name) {
+        : UserTypeInstanceASTNode(lineNum, fileIndex, name) {
 
 }
 
@@ -152,12 +182,17 @@ void InfixTypeInstanceASTNode::bindRight(std::unique_ptr<TypeInstanceASTNode> &&
     rhs = std::move(param);
 }
 
-llvm::Type *InfixTypeInstanceASTNode::llvmType() const {
-    llvm::PointerType::get;
-}
-
 bool InfixTypeInstanceASTNode::isPolymorphic() const {
     return left()->isPolymorphic() || right()->isPolymorphic();
+}
+
+llvm::Type *InfixTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const {
+    return generator.generate<InfixTypeInstanceASTNode>(View{
+            .name = name,
+            .lhs = lhs,
+            .rhs = rhs,
+            .bindingMap = bindingMap
+    });
 }
 
 FunctionTypeInstanceASTNode::FunctionTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name)
@@ -165,21 +200,22 @@ FunctionTypeInstanceASTNode::FunctionTypeInstanceASTNode(size_t lineNum, size_t 
 
 }
 
-PrefixTypeInstanceASTNode::PrefixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name)
-        : TypeInstanceASTNode(lineNum, fileIndex, name) {
-
+llvm::Type *FunctionTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const {
+    return generator.generate<FunctionTypeInstanceASTNode>(View{
+            .name = name,
+            .lhs = lhs,
+            .rhs = rhs,
+            .bindingMap = bindingMap
+    });
 }
 
-llvm::Type *FunctionTypeInstanceASTNode::llvmType() const {
-    return nullptr;
+PrefixTypeInstanceASTNode::PrefixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name)
+        : UserTypeInstanceASTNode(lineNum, fileIndex, name) {
+
 }
 
 void PrefixTypeInstanceASTNode::bindParameter(std::unique_ptr<TypeInstanceASTNode> &&param) {
     params.push_back(std::move(param));
-}
-
-llvm::Type *PrefixTypeInstanceASTNode::llvmType() const {
-    return nullptr;
 }
 
 bool PrefixTypeInstanceASTNode::isPolymorphic() const {
@@ -187,4 +223,24 @@ bool PrefixTypeInstanceASTNode::isPolymorphic() const {
                        [](const std::unique_ptr<TypeInstanceASTNode> &param) {
                            return param->isPolymorphic();
                        });
+}
+
+llvm::Type *PrefixTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const {
+    return generator.generate<PrefixTypeInstanceASTNode>(View{
+            .name = name,
+            .params = params,
+            .bindingMap = bindingMap
+    });
+}
+
+PrimitiveTypeInstanceASTNode::PrimitiveTypeInstanceASTNode(const PrimitiveType &type)
+        : type(type) {
+
+}
+
+llvm::Type *
+PrimitiveTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &) const {
+    return generator.generate<PrimitiveTypeInstanceASTNode>(View{
+        .type = type
+    });
 }

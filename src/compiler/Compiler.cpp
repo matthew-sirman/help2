@@ -4,33 +4,98 @@
 
 #include "../../include/compiler/Compiler.h"
 
-CompileContext::CompileContext()
+#include "../../include/lang/core/CoreBuilder.h"
+
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/IPO.h>
+
+CompileContext::CompileContext(std::unique_ptr<ParseTree> &&tree)
         : ctxContext(std::make_unique<llvm::LLVMContext>()),
-          ctxBuilder(std::make_unique<llvm::IRBuilder<>>(*ctxContext)) {
+          ctxBuilder(std::make_unique<llvm::IRBuilder<>>(*ctxContext)),
+          ctxCurrentModule(nullptr),
+          tree(std::move(tree)) {
+    // Create each module present in the parse tree
+    for (const ParseTree::Module &ptMod : this->tree->allModules()) {
+        std::unique_ptr<llvm::Module> module = std::make_unique<llvm::Module>(ptMod.moduleName, *ctxContext);
+        module->setSourceFileName(ptMod.fileName.generic_string());
+        ctxModules[ptMod.moduleName] = std::move(module);
+    }
+}
+
+void CompileContext::setCurrentModule(const std::string &name) {
+    ctxCurrentModule = &ctxModules[name];
+}
+
+void CompileContext::addInstantiatedType(const std::string &name, llvm::Type *type) {
+    instantiatedTypes[name] = type;
+}
+
+void CompileContext::addConstructorType(const std::string &name, llvm::Type *type) {
+    instantiatedConstructors[name] = type;
+}
+
+llvm::Type *CompileContext::lookupType(const std::string &name) const {
+    if (instantiatedTypes.contains(name)) {
+        return instantiatedTypes.at(name);
+    }
+    return nullptr;
+}
+
+llvm::Type *CompileContext::lookupConstructor(const std::string &name) const {
+    if (instantiatedConstructors.contains(name)) {
+        return instantiatedConstructors.at(name);
+    }
+    return nullptr;
+}
+
+llvm::IntegerType *CompileContext::int8Type() const {
+    return llvm::IntegerType::getInt8Ty(*ctxContext);
+}
+
+llvm::IntegerType *CompileContext::int16Type() const {
+    return llvm::IntegerType::getInt16Ty(*ctxContext);
+}
+
+llvm::IntegerType *CompileContext::int32Type() const {
+    return llvm::IntegerType::getInt32Ty(*ctxContext);
+}
+
+llvm::IntegerType *CompileContext::int64Type() const {
+    return llvm::IntegerType::getInt64Ty(*ctxContext);
+}
+
+llvm::FunctionType *CompileContext::intBinaryOpType() const {
+    llvm::IntegerType *i64Ty = int64Type();
+    return llvm::FunctionType::get(i64Ty, {i64Ty, i64Ty}, false);
+}
+
+llvm::ConstantInt *CompileContext::intValue(long long int val) const {
+    return llvm::ConstantInt::get(int64Type(), val);
+}
+
+Compiler::Compiler(std::unique_ptr<ParseTree> &&tree)
+        : context(std::move(tree)) {
 
 }
 
-Compiler::Compiler(std::unique_ptr<ParseTree> &&tree, const std::string &moduleName)
-        : tree(std::move(tree)) {
-
-}
 
 void Compiler::compile() {
-    for (const std::pair<const std::string, std::unique_ptr<TypeDeclASTNode>> &type : tree->types()) {
+    // First, we build the core
+    CoreBuilder(context.tree->core()).build(*context.context());
 
-    }
+    TypeCodeGenerator typeGenerator(context);
+    FunctionCodeGenerator functionGenerator(context, typeGenerator);
 
-    std::vector<std::unique_ptr<llvm::Function>> compiledFunctions;
-
-    for (const std::pair<const std::string, std::unique_ptr<FunctionDefinitionASTNode>> &func : tree->functions()) {
+    for (const std::pair<const std::string, std::unique_ptr<FunctionDefinitionASTNode>> &func : context.tree->functions()) {
         // Skip over polymorphic functions - they will be instantiated on demand from concrete functions
         // Note that it is impossible to ever "add" polymorphism in a function, i.e. a concrete function
-        // can never become polymorphic.
+        // can never become polymorphic in the body.
         if (func.second->isPolymorphic()) {
             continue;
         }
-        std::vector<std::unique_ptr<llvm::Function>> quota = func.second->generate(context);
-        compiledFunctions.reserve(compiledFunctions.size() + quota.size());
-        std::move(std::begin(quota), std::end(quota), std::back_inserter(compiledFunctions));
+        // Generate the functions which will in turn generate any dependent functions or types and specialise any
+        // polymorphic ones. Note this also means the binding map is empty at this point.
+        func.second->generate(functionGenerator, {});
     }
 }

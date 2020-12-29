@@ -14,21 +14,36 @@
 
 #include "ASTNode.h"
 
-class CompileContext;
+#include "../../lang/core/PrimitiveType.h"
+
+class TypeCodeGenerator;
 
 enum class TypeUsage {
     Infix,
     Prefix,
     Function,
-    Polymorphic
+    Polymorphic,
+    Primitive
 };
 
 class TypeInstanceASTNode;
 
 class TypeDeclASTNode;
 
+using BindingMap = std::unordered_map<std::string, llvm::Type *>;
+
 class DataConstructorASTNode : public ASTNode {
 public:
+    struct View {
+        const std::unique_ptr<TypeDeclASTNode> &type;
+        const std::string &constructorName;
+        const std::vector<TypeInstanceASTNode *> &params;
+        const std::string &uniqueTypeName;
+        unsigned char tagSize;
+        unsigned short tag;
+        const BindingMap &bindingMap;
+    };
+
     DataConstructorASTNode(size_t lineNum, size_t fileIndex, const std::unique_ptr<TypeDeclASTNode> &type,
                            std::string constructorName);
 
@@ -38,13 +53,12 @@ public:
 
     virtual constexpr TypeUsage usage() const = 0;
 
-    virtual void generate(const CompileContext &context) = 0;
+    virtual llvm::Type *generate(TypeCodeGenerator &generator, const std::string &uniqueTypeName, unsigned char tagSize,
+                                 unsigned short tag, const BindingMap &bindingMap) const = 0;
 
 protected:
     const std::unique_ptr<TypeDeclASTNode> &type;
     std::string constructorName;
-
-    unsigned tagID;
 };
 
 class PrefixDataConstructorASTNode : public DataConstructorASTNode {
@@ -62,7 +76,8 @@ public:
 
     const std::vector<std::unique_ptr<TypeInstanceASTNode>> &parameters() const { return params; }
 
-    void generate(const CompileContext &context) override;
+    llvm::Type *generate(TypeCodeGenerator &generator, const std::string &uniqueTypeName, unsigned char tagSize,
+                         unsigned short tag, const BindingMap &bindingMap) const override;
 
 private:
     std::vector<std::unique_ptr<TypeInstanceASTNode>> params;
@@ -82,7 +97,8 @@ public:
 
     const std::unique_ptr<TypeInstanceASTNode> &rightParameter() const { return rhs; }
 
-    void generate(const CompileContext &context) override;
+    llvm::Type *generate(TypeCodeGenerator &generator, const std::string &uniqueTypeName, unsigned char tagSize,
+                         unsigned short tag, const BindingMap &bindingMap) const override;
 
 private:
     std::unique_ptr<TypeInstanceASTNode> lhs, rhs;
@@ -90,6 +106,14 @@ private:
 
 class TypeDeclASTNode : public ASTNode {
 public:
+    struct View {
+        size_t fileIndex;
+        const std::string &name;
+        const std::vector<std::unique_ptr<DataConstructorASTNode>> &constructors;
+        const std::vector<std::string> &typeConstructorParameters;
+        const std::vector<llvm::Type *> &bindings;
+    };
+
     TypeDeclASTNode(size_t lineNum, size_t fileIndex, std::string name);
 
     TypeDeclASTNode(size_t lineNum, size_t fileIndex, std::string name,
@@ -105,9 +129,7 @@ public:
 
     const std::vector<std::unique_ptr<DataConstructorASTNode>> &dataConstructors() const { return constructors; };
 
-    void generate(const CompileContext &context) const;
-
-private:
+protected:
     std::string name;
     std::vector<std::unique_ptr<DataConstructorASTNode>> constructors;
 };
@@ -129,6 +151,10 @@ public:
 
     size_t args() const override { return typeConstructorParameters.size(); }
 
+    llvm::Type *generate(TypeCodeGenerator &generator) const;
+
+    llvm::Type *generate(TypeCodeGenerator &generator, const std::vector<llvm::Type *> &bindings) const;
+
 private:
     std::vector<std::string> typeConstructorParameters;
 };
@@ -149,40 +175,52 @@ public:
 
     constexpr size_t args() const override { return 2; }
 
+    llvm::Type *generate(TypeCodeGenerator &generator, llvm::Type *leftBinding, llvm::Type *rightBinding) const;
+
 private:
     std::string leftParameter, rightParameter;
 };
 
-
-class TypeInstanceASTNode : public ASTNode {
+class TypeInstanceASTNode {
 public:
-    TypeInstanceASTNode(size_t lineNum, size_t fileIndex, std::string name);
+    TypeInstanceASTNode();
 
     virtual constexpr TypeUsage typeUsage() const = 0;
 
-    const std::string &typeName() const { return name; }
-
-    virtual llvm::Type *llvmType() const = 0;
-
     virtual bool isPolymorphic() const = 0;
 
-private:
+    virtual llvm::Type *instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const = 0;
+};
+
+class UserTypeInstanceASTNode : public TypeInstanceASTNode, public ASTNode {
+public:
+    UserTypeInstanceASTNode(size_t lineNum, size_t fileIndex, std::string name);
+
+    const std::string &typeName() const { return name; }
+
+protected:
     std::string name;
 };
 
-class PolymorphicTypeInstanceASTNode : public TypeInstanceASTNode {
+class PolymorphicTypeInstanceASTNode : public UserTypeInstanceASTNode {
 public:
     PolymorphicTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name);
 
     constexpr TypeUsage typeUsage() const override { return TypeUsage::Polymorphic; }
 
-    llvm::Type *llvmType() const override;
-
     bool isPolymorphic() const override;
+
+    llvm::Type *instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const override;
 };
 
-class InfixTypeInstanceASTNode : public TypeInstanceASTNode {
+class InfixTypeInstanceASTNode : public UserTypeInstanceASTNode {
 public:
+    struct View {
+        const std::string &name;
+        const std::unique_ptr<TypeInstanceASTNode> &lhs, &rhs;
+        const BindingMap &bindingMap;
+    };
+
     InfixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name);
 
     virtual constexpr TypeUsage typeUsage() const override { return TypeUsage::Infix; }
@@ -195,25 +233,33 @@ public:
 
     virtual void bindRight(std::unique_ptr<TypeInstanceASTNode> &&param);
 
-    virtual llvm::Type *llvmType() const override;
-
     bool isPolymorphic() const override;
 
-private:
+    llvm::Type *instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const override;
+
+protected:
     std::unique_ptr<TypeInstanceASTNode> lhs, rhs;
 };
 
 class FunctionTypeInstanceASTNode : public InfixTypeInstanceASTNode {
 public:
+    using View = InfixTypeInstanceASTNode::View;
+
     FunctionTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name);
 
     constexpr TypeUsage typeUsage() const override { return TypeUsage::Function; }
 
-    llvm::Type *llvmType() const override;
+    llvm::Type *instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const override;
 };
 
-class PrefixTypeInstanceASTNode : public TypeInstanceASTNode {
+class PrefixTypeInstanceASTNode : public UserTypeInstanceASTNode {
 public:
+    struct View {
+        const std::string &name;
+        const std::vector<std::unique_ptr<TypeInstanceASTNode>> &params;
+        const BindingMap &bindingMap;
+    };
+
     PrefixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name);
 
     void bindParameter(std::unique_ptr<TypeInstanceASTNode> &&param);
@@ -222,12 +268,30 @@ public:
 
     const std::vector<std::unique_ptr<TypeInstanceASTNode>> &parameters() const { return params; }
 
-    llvm::Type *llvmType() const override;
-
     bool isPolymorphic() const override;
+
+    llvm::Type *instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const override;
 
 private:
     std::vector<std::unique_ptr<TypeInstanceASTNode>> params;
+};
+
+class PrimitiveTypeInstanceASTNode : public TypeInstanceASTNode {
+public:
+    struct View {
+        const PrimitiveType &type;
+    };
+
+    PrimitiveTypeInstanceASTNode(const PrimitiveType &type);
+
+    constexpr TypeUsage typeUsage() const override { return TypeUsage::Primitive; }
+
+    constexpr bool isPolymorphic() const override { return false; }
+
+    llvm::Type * instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const override;
+
+private:
+    const PrimitiveType &type;
 };
 
 #endif //HELP2_TYPEASTNODES_H

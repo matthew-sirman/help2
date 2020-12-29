@@ -46,27 +46,6 @@ ValueFunctionDeclASTNode::ValueFunctionDeclASTNode(size_t lineNum, size_t fileIn
 
 }
 
-PatternASTNode::PatternASTNode(size_t lineNum, size_t fileIndex)
-        : ASTNode(lineNum, fileIndex) {
-
-}
-
-VariablePatternASTNode::VariablePatternASTNode(size_t lineNum, size_t fileIndex, std::string binder)
-        : PatternASTNode(lineNum, fileIndex), binderName(std::move(binder)) {
-
-}
-
-ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor)
-        : PatternASTNode(lineNum, fileIndex), dataConstructorName(std::move(dataConstructor)) {
-
-}
-
-ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor,
-                                                     std::vector<std::unique_ptr<PatternASTNode>> &&subPatterns)
-        : PatternASTNode(lineNum, fileIndex), dataConstructorName(std::move(dataConstructor)),
-          subPatterns(std::move(subPatterns)) {
-
-}
 
 FunctionImplASTNode::FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body)
         : ASTNode(lineNum, fileIndex), body(std::move(body)) {
@@ -86,8 +65,21 @@ PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(size_t lineNum, size_t file
 
 }
 
-void PrefixFunctionImplASTNode::generate(const CodeGenerator &generator) const {
-    generator.generate<PrefixFunctionImplASTNode>(View { .patterns = patterns, .body = body });
+llvm::BasicBlock *PrefixFunctionImplASTNode::generate(FunctionCodeGenerator &generator, unsigned variant,
+                                                      llvm::Function *parentFunction) const {
+    std::vector<PatternASTNode *> unboxedPatterns(patterns.size());
+    std::transform(
+            patterns.begin(), patterns.end(), unboxedPatterns.begin(),
+            [](const std::unique_ptr<PatternASTNode> &pattern) {
+                return pattern.get();
+            }
+    );
+    return generator.generateImplementationBlock(View{
+            .patterns = unboxedPatterns,
+            .body = body,
+            .variant = variant,
+            .parentFunction = parentFunction
+    });
 }
 
 InfixFunctionImplASTNode::InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
@@ -98,8 +90,14 @@ InfixFunctionImplASTNode::InfixFunctionImplASTNode(size_t lineNum, size_t fileIn
 
 }
 
-void InfixFunctionImplASTNode::generate(const CodeGenerator &generator) const {
-    generator.generate<InfixFunctionImplASTNode>(View { .lhs = lhs, .rhs = rhs, .body = body });
+llvm::BasicBlock *InfixFunctionImplASTNode::generate(FunctionCodeGenerator &generator, unsigned variant,
+                                                     llvm::Function *parentFunction) const {
+    return generator.generateImplementationBlock(View{
+            .patterns = {lhs.get(), rhs.get()},
+            .body = body,
+            .variant = variant,
+            .parentFunction = parentFunction
+    });
 }
 
 FunctionDefinitionASTNode::FunctionDefinitionASTNode(std::unique_ptr<FunctionDeclASTNode> &&declaration)
@@ -111,41 +109,12 @@ void FunctionDefinitionASTNode::addImplementation(std::unique_ptr<FunctionImplAS
     implementations.push_back(std::move(implementation));
 }
 
-void FunctionDefinitionASTNode::generate(const CodeGenerator &generator) const {
-    std::vector<std::unique_ptr<llvm::Function>> impls;
-    impls.reserve(implementations.size());
-
-    TypeInstanceASTNode *typeNode = declaration->functionType().get();
-    std::vector<llvm::Type *> argTypes;
-
-    /*while (true) {
-        if (typeNode->typeUsage() == TypeUsage::Function) {
-            FunctionTypeInstanceASTNode *fTypeNode = dynamic_cast<FunctionTypeInstanceASTNode *>(typeNode);
-            typeNode = fTypeNode->right().get();
-            // argTypes.push_back(fTypeNode->left().)
-        } else {
-
-        }
-        switch (typeNode->typeUsage()) {
-            case TypeUsage::Infix:
-                break;
-            case TypeUsage::Prefix:
-                break;
-            case TypeUsage::Function:
-                break;
-            case TypeUsage::Polymorphic:
-                break;
-        }
-    }*/
-
-    // llvm::FunctionType *ty = llvm::FunctionType::get(llvm::Type::getPo);
-
-    /*std::transform(implementations.begin(), implementations.end(), impls.begin(),
-                   [ty, &context](const std::unique_ptr<FunctionImplASTNode> &impl) {
-        return impl->generate(context,std::unique_ptr<llvm::Function>(llvm::Function::Create(
-                ty, llvm::Function::ExternalLinkage,
-                "", context.module("").get()
-        )));
-    });*/
+llvm::Function *
+FunctionDefinitionASTNode::generate(FunctionCodeGenerator &generator, const BindingMap &bindingMap) const {
+    return generator.generateDefinition(View{
+            .declaration = declaration,
+            .implementations = implementations,
+            .hasOverloads = hasOverloads()
+    }, bindingMap);
 }
 

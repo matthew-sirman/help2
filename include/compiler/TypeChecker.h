@@ -30,10 +30,10 @@ private:
                                          const std::unique_ptr<TypeInstanceASTNode> &type) const;
 
     bool typeCheckPattern(const std::unique_ptr<PatternASTNode> &pattern,
-                          const std::unique_ptr<TypeInstanceASTNode> &type) const;
+                          TypeInstanceASTNode *type) const;
 
     bool typeCheckExpression(const std::unique_ptr<ExpressionASTNode> &expr,
-                             const std::unique_ptr<TypeInstanceASTNode> &type) const;
+                             TypeInstanceASTNode *type) const;
 
     void logError(const std::string &message) const;
 

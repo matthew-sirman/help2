@@ -8,11 +8,32 @@
 #include <string>
 #include <memory>
 
-#include "ASTNode.h"
+#include <llvm/IR/Value.h>
+
+#include "PatternASTNodes.h"
+
+#include "../../lang/core/BuiltinFunction.h"
+
+class ExpressionCodeGenerator;
+
+enum class ExpressionType {
+    Lambda,
+    Application,
+    LetBinding,
+    Function,
+    InlineFunction,
+    Variable,
+    Constructor,
+    PrimitiveConstructor
+};
 
 class ExpressionASTNode : public ASTNode {
 public:
     ExpressionASTNode(size_t lineNum, size_t fileIndex);
+
+    virtual constexpr ExpressionType type() const = 0;
+
+    virtual llvm::Value *generate(ExpressionCodeGenerator &generator) const = 0;
 };
 
 /*
@@ -21,10 +42,20 @@ public:
  */
 class LambdaExpressionASTNode : public ExpressionASTNode {
 public:
-    LambdaExpressionASTNode(size_t lineNum, size_t fileIndex, std::string binder, std::unique_ptr<ExpressionASTNode> &&expression);
+    struct View {
+        const std::unique_ptr<PatternASTNode> &binder;
+        const std::unique_ptr<ExpressionASTNode> &expression;
+    };
+
+    LambdaExpressionASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<PatternASTNode> &&binder,
+                            std::unique_ptr<ExpressionASTNode> &&expression);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::Lambda; }
 
 private:
-    std::string binder;
+    std::unique_ptr<PatternASTNode> binder;
     std::unique_ptr<ExpressionASTNode> expression;
 };
 
@@ -34,20 +65,23 @@ private:
  */
 class ApplicationASTNode : public ExpressionASTNode {
 public:
-    ApplicationASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&func, std::unique_ptr<ExpressionASTNode> &&arg);
+    struct View {
+        const std::unique_ptr<ExpressionASTNode> &function, &argument;
+    };
+
+    ApplicationASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&func,
+                       std::unique_ptr<ExpressionASTNode> &&arg);
+
+    constexpr const std::unique_ptr<ExpressionASTNode> &appFunction() const { return function; }
+
+    constexpr const std::unique_ptr<ExpressionASTNode> &appArgument() const { return argument; }
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::Application; }
 
 private:
     std::unique_ptr<ExpressionASTNode> function, argument;
-};
-
-/*
- * Infix Application syntax:
- * l e r
- */
-class InfixApplicationASTNode : public ExpressionASTNode {
-
-private:
-    std::unique_ptr<ExpressionASTNode> lhs, function, rhs;
 };
 
 /*
@@ -56,60 +90,138 @@ private:
  */
 class LetBindingASTNode : public ExpressionASTNode {
 public:
-    LetBindingASTNode(size_t lineNum, size_t fileIndex, std::string binder, std::unique_ptr<ExpressionASTNode> &&body,
+    struct View {
+        const std::unique_ptr<PatternASTNode> &binder;
+        const std::unique_ptr<ExpressionASTNode> &boundExpression, &usage;
+    };
+
+    LetBindingASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<PatternASTNode> &&binder,
+                      std::unique_ptr<ExpressionASTNode> &&body,
                       std::unique_ptr<ExpressionASTNode> &&usage);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::LetBinding; }
 
 private:
     // Bound variable (var)
-    std::string binder;
+    std::unique_ptr<PatternASTNode> binder;
     // Bound expression (e1) and usage (e2)
     std::unique_ptr<ExpressionASTNode> boundExpression, usage;
 };
 
 class FunctionASTNode : public ExpressionASTNode {
 public:
-    FunctionASTNode(size_t lineNum, size_t fileIndex, std::string name);
+    struct View {
+        const std::string &name;
+        bool nullary;
+    };
+
+    FunctionASTNode(size_t lineNum, size_t fileIndex, std::string name, bool nullary = false);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::Function; }
+
+    constexpr bool isNullary() const { return nullary; }
 
 private:
     std::string name;
+    bool nullary;
+};
+
+class BuiltinFunctionASTNode : public ExpressionASTNode {
+public:
+    struct View {
+        const std::unique_ptr<BuiltinFunction> &func;
+    };
+
+    BuiltinFunctionASTNode(size_t lineNum, size_t fileIndex, const std::unique_ptr<BuiltinFunction> &func);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::InlineFunction; }
+
+private:
+    const std::unique_ptr<BuiltinFunction> &func;
 };
 
 class VariableASTNode : public ExpressionASTNode {
 public:
-    VariableASTNode(size_t lineNum, size_t fileIndex, std::string name);
+    struct View {
+        const VariablePatternASTNode *variableRef;
+    };
+
+    VariableASTNode(size_t lineNum, size_t fileIndex, const VariablePatternASTNode *variableRef);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::Variable; }
 
 private:
-    // Name of the variable
-    std::string name;
+    const VariablePatternASTNode *variableRef;
 };
 
 class ConstructorASTNode : public ExpressionASTNode {
 public:
+    struct View {
+        const std::string &name;
+    };
+
     ConstructorASTNode(size_t lineNum, size_t fileIndex, std::string name);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
+
+    constexpr ExpressionType type() const override { return ExpressionType::Constructor; }
 
 private:
     std::string name;
 };
 
-class IntegralConstructorASTNode : public ExpressionASTNode {
+class PrimitiveConstructorASTNode : public ExpressionASTNode {
 public:
+    PrimitiveConstructorASTNode(size_t lineNum, size_t fileIndex);
+
+    constexpr ExpressionType type() const override { return ExpressionType::PrimitiveConstructor; }
+};
+
+class IntegralConstructorASTNode : public PrimitiveConstructorASTNode {
+public:
+    struct View {
+        long long value;
+    };
+
     IntegralConstructorASTNode(size_t lineNum, size_t fileIndex, long long value);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
 
 private:
     long long value;
 };
 
-class DecimalConstructorASTNode : public ExpressionASTNode {
+class DecimalConstructorASTNode : public PrimitiveConstructorASTNode {
 public:
+    struct View {
+        double value;
+    };
+
     DecimalConstructorASTNode(size_t lineNum, size_t fileIndex, double value);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
 
 private:
     double value;
 };
 
-class CharConstructorASTNode : public ExpressionASTNode {
+class CharConstructorASTNode : public PrimitiveConstructorASTNode {
 public:
+    struct View {
+        char value;
+    };
+
     CharConstructorASTNode(size_t lineNum, size_t fileIndex, char value);
+
+    llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
 
 private:
     char value;
