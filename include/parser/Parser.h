@@ -1,66 +1,82 @@
 //
-// Created by matthew on 23/11/2020.
+// Created by matthew on 30/12/2020.
 //
 
-#ifndef HELP2_PARSER_H
-#define HELP2_PARSER_H
+#ifndef HELPC_PARSER_H
+#define HELPC_PARSER_H
 
+#include <string>
+#include <vector>
+#include <optional>
 #include <unordered_set>
+#include <filesystem>
+#include <sstream>
 
 #include "Tokeniser.h"
 #include "ParseTree.h"
+#include "FileStructure.h"
 
 class Parser {
 public:
-    Parser(const Tokeniser &tokeniser);
+    using Error = std::string;
 
-    std::unique_ptr<ParseTree> parse(std::unique_ptr<ParseTree> &&tree);
+    Parser(FileStructure &fileStructure, const std::filesystem::path &sourceFile);
+
+    Parser(FileStructure &fileStructure, const std::filesystem::path &sourceFile, const std::string &source);
+
+    void parse(ParseTree &tree);
+
+    bool hasErrors() const { return !errorList.empty(); }
+
+    std::vector<Error> errors() const;
 
 private:
-    std::unique_ptr<ParseTree> parsePrefixFunction(std::unique_ptr<ParseTree> tree);
+    using TokeniseFunc = std::function<bool(Token &)>;
 
-    std::unique_ptr<ParseTree> parseInfixFunction(std::unique_ptr<ParseTree> tree);
+    static std::string loadSourceFile(const std::filesystem::path &sourcePath);
 
-    std::unique_ptr<ParseTree> parseValue(std::unique_ptr<ParseTree> tree);
+    // Top level
+    void parseImport(Token &token, ParseTree &tree);
 
-    std::unique_ptr<ParseTree> parsePrefixType(std::unique_ptr<ParseTree> tree);
+    bool parseAnyFunctionDecl(Token &token, const ParseTree &tree, std::unique_ptr<FunctionDeclASTNode> &function);
 
-    std::unique_ptr<ParseTree> parseInfixType(std::unique_ptr<ParseTree> tree);
+    std::unique_ptr<FunctionDeclASTNode> parseFunctionDecl(Token &token, const ParseTree &tree, FunctionUsage mode,
+                                                           std::optional<Associativity> assoc = std::nullopt);
 
-    std::unique_ptr<ParseTree> parseDataConstructors(std::unique_ptr<ParseTree> tree,
-                                                     const std::unique_ptr<TypeDeclASTNode> &type,
-                                                     const std::unordered_set<std::string> &typeParameters);
+    TokeniseFunc topLevelTypeDecl(ParseTree &tree, bool infix);
 
-    std::unique_ptr<ParseTree> parseDefinition(std::unique_ptr<ParseTree> tree);
+    void parseTypeDecl(Token &token, ParseTree &tree, bool infix = false);
 
-    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance(const std::unique_ptr<ParseTree> &tree);
+    void parseTypeclass(Token &token, ParseTree &tree);
 
-    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance(const std::unique_ptr<ParseTree> &tree,
-                                                           const std::unordered_set<std::string> &polyTypes);
+    void parseTypeclassInstanceDecl(Token &token, ParseTree &tree);
 
-    std::unique_ptr<TypeInstanceASTNode> parseTypeInstance(const std::unique_ptr<ParseTree> &tree, bool checkPolyTypes,
-                                                           const std::unordered_set<std::string> &polyTypes);
+    std::unique_ptr<FunctionImplASTNode> parseImplementation(Token &token, const ParseTree &tree);
 
-    std::unique_ptr<TypeInstanceASTNode> parseConstructorTypeInstance(const std::unique_ptr<ParseTree> &tree,
-                                                                      const std::unordered_set<std::string> &polyTypes);
+    std::unique_ptr<FunctionImplASTNode> parseImplementation(Token &token, const ParseTree &tree, std::string &name);
 
-    std::unique_ptr<PatternASTNode> parsePattern(const std::unique_ptr<ParseTree> &tree,
-                                                 BinderMap &usedBinders);
+    // Subparsers
+    bool parseTypeInstance(
+            Token &token, const ParseTree &tree, std::unique_ptr<TypeInstanceASTNode> &inst,
+            std::optional<std::reference_wrapper<const std::unordered_set<std::string>>> typeVars = std::nullopt
+    );
 
-    std::unique_ptr<ExpressionASTNode> parseExpression(const std::unique_ptr<ParseTree> &tree,
-                                                       const BinderMap &binders,
-                                                       int currentPrecedence);
+    std::unique_ptr<TypeclassInstanceASTNode> parseTypeclassInstance(Token &token, const ParseTree &tree);
 
-    std::unique_ptr<LetBindingASTNode> parseLetBinding(const std::unique_ptr<ParseTree> &tree,
-                                                       const BinderMap &binders);
+    bool parseImplicationList(Token &token, const ParseTree &tree,
+                              std::vector<std::unique_ptr<TypeclassInstanceASTNode>> &implList);
 
-    std::unique_ptr<LambdaExpressionASTNode> parseLambda(const std::unique_ptr<ParseTree> &tree,
-                                                         const BinderMap &binders);
+    void parseDataConstructors(Token &token, const TypeDeclASTNode &type, ParseTree &tree,
+                               const std::unordered_set<std::string> &typeVars);
 
-    void logError(const std::string &message);
+    // bool parseFunctionDeclList()
 
+    std::stringstream &appendError(const Token &errorPoint);
+
+    FileStructure &fileStructure;
+    std::size_t fileIndex;
     Tokeniser tokeniser;
-    size_t fileIndex = -1;
+    std::vector<std::stringstream> errorList;
 };
 
-#endif //HELP2_PARSER_H
+#endif //HELPC_PARSER_H

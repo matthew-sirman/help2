@@ -33,10 +33,13 @@ size_t PrefixFunctionDeclASTNode::maxArgs() const {
     return m;
 }
 
+// TODO: Move this
+constexpr int defaultPrecedence = 5;
+
 InfixFunctionDeclASTNode::InfixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
                                                    std::unique_ptr<TypeInstanceASTNode> &&funcType,
-                                                   int precedence, Associativity assoc)
-        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(funcType)), precedence(precedence), assoc(assoc) {
+                                                   Associativity assoc)
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(funcType)), precedence(defaultPrecedence), assoc(assoc) {
 
 }
 

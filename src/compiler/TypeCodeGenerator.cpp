@@ -27,7 +27,7 @@ llvm::Type *TypeCodeGenerator::generate<DataConstructorASTNode>(const DataConstr
         cons = reinterpret_cast<llvm::StructType *>(context.lookupType(nodeView.uniqueTypeName));
     }
 
-    context.addConstructorType(nodeView.constructorName, cons);
+    context.addConstructorType(nodeView.constructorName, cons, nodeView.tagSize != 0);
 
     // Next, we generate a new field for each of the parameters
     for (const TypeInstanceASTNode *paramType : nodeView.params) {
@@ -63,13 +63,15 @@ llvm::Type *TypeCodeGenerator::generate<DataConstructorASTNode>(const DataConstr
 void TypeCodeGenerator::generateConstructorFunction(const DataConstructorASTNode::View &nodeView,
                                                     llvm::StructType *consType,
                                                     const std::vector<llvm::Type *> &fields) {
+    // TODO: Handle constructors containing closures
+
     // Create function type and declaration
     llvm::FunctionType *consFunctionType = llvm::FunctionType::get(
             llvm::PointerType::get(consType, 0), fields, false
     );
     llvm::Function *consFunction = llvm::Function::Create(
             consFunctionType, llvm::Function::ExternalLinkage,
-            nodeView.uniqueTypeName + "-" + nodeView.constructorName + "-Ctor",
+            nodeView.constructorName,
             context.currentModule().get()
     );
 
@@ -248,6 +250,11 @@ TypeCodeGenerator::generate<FunctionTypeInstanceASTNode>(const FunctionTypeInsta
         return nullptr;
     }
 
+    // If "from" is a struct type, we want to use a pointer
+    if (from->isStructTy()) {
+        from = llvm::PointerType::get(from, 0);
+    }
+
     // If "to" is a function type, then we can collapse the overall function type to have an additional prepending
     // argument
     // Then by induction we know that "to" is already flattened.
@@ -265,6 +272,10 @@ TypeCodeGenerator::generate<FunctionTypeInstanceASTNode>(const FunctionTypeInsta
         return type;
     }
     // Otherwise, we just construct a basic unary function type (base case)
+    // If "to" is a struct type, we want to use pointer
+    if (to->isStructTy()) {
+        to = llvm::PointerType::get(to, 0);
+    }
     return llvm::FunctionType::get(to, {from}, false);
 }
 

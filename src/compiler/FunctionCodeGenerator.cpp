@@ -13,7 +13,7 @@ llvm::BasicBlock *
 FunctionCodeGenerator::generateImplementationBlock(const FunctionImplASTNode::View &nodeView) {
     llvm::BasicBlock *implBlock = llvm::BasicBlock::Create(
             *context.context(),
-            "var" + std::to_string(nodeView.variant),
+            "impl_variant" + std::to_string(nodeView.variant),
             nodeView.parentFunction
     );
 

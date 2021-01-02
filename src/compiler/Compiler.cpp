@@ -31,8 +31,8 @@ void CompileContext::addInstantiatedType(const std::string &name, llvm::Type *ty
     instantiatedTypes[name] = type;
 }
 
-void CompileContext::addConstructorType(const std::string &name, llvm::Type *type) {
-    instantiatedConstructors[name] = type;
+void CompileContext::addConstructorType(const std::string &name, llvm::Type *type, bool tagged) {
+    instantiatedConstructors[name] = { type, tagged };
 }
 
 llvm::Type *CompileContext::lookupType(const std::string &name) const {
@@ -42,11 +42,11 @@ llvm::Type *CompileContext::lookupType(const std::string &name) const {
     return nullptr;
 }
 
-llvm::Type *CompileContext::lookupConstructor(const std::string &name) const {
+std::optional<TypeInfo> CompileContext::lookupConstructor(const std::string &name) const {
     if (instantiatedConstructors.contains(name)) {
         return instantiatedConstructors.at(name);
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 llvm::IntegerType *CompileContext::int8Type() const {

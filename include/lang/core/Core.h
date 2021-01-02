@@ -23,11 +23,11 @@ public:
 
     const PrimitiveType &getPrimitiveType(const std::string &name) const;
 
-    bool builtinTypeExists(const std::string &name) const;
-
     bool builtinFunctionExists(const std::string &name) const;
 
     const std::unique_ptr<BuiltinFunction> &getBuiltinFunction(const std::string &name) const;
+
+    const PrimitiveType &unitType() const;
 
 private:
     Core() = default;
@@ -37,8 +37,6 @@ private:
     void addBuiltinFunction(std::unique_ptr<BuiltinFunction> &&func);
 
     std::unordered_map<std::string, PrimitiveType> primitiveTypeMap;
-    // TODO: Fix this to actually take builtin types!
-    std::unordered_map<std::string, int> builtinTypeMap;
     std::unordered_map<std::string, std::unique_ptr<BuiltinFunction>> builtinFunctionMap;
 };
 

@@ -18,6 +18,7 @@ class TypeChecker;
 
 class ParseTree {
     friend class TypeChecker;
+
 public:
     struct Module {
         const std::filesystem::path fileName;
@@ -30,9 +31,14 @@ public:
 
     void addFunctionImplementation(const std::string &func, std::unique_ptr<FunctionImplASTNode> &&implementation);
 
-    const std::unique_ptr<TypeDeclASTNode> &addTypeDeclaration(std::unique_ptr<TypeDeclASTNode> &&declaration);
+    const TypeDeclASTNode &addTypeDeclaration(std::unique_ptr<TypeDeclASTNode> &&declaration);
 
-    void addDataConstructor(const std::unique_ptr<TypeDeclASTNode> &type, std::unique_ptr<DataConstructorASTNode> &&constructor);
+    void addTypeclass(std::unique_ptr<TypeclassASTNode> &&typeclass);
+
+    void addDataConstructor(const TypeDeclASTNode &type, std::unique_ptr<DataConstructorASTNode> &&constructor);
+
+    TypeclassInstanceImplASTNode &addTypeclassInstance(const std::string &typeclassName,
+                                                       std::unique_ptr<TypeclassInstanceImplASTNode> &&instance);
 
     bool functionExists(const std::string &name) const;
 
@@ -40,11 +46,15 @@ public:
 
     bool constructorExists(const std::string &name) const;
 
-    const std::unique_ptr<FunctionDefinitionASTNode> &getFuncByName(const std::string &name) const;
+    bool typeclassExists(const std::string &name) const;
 
-    const std::unique_ptr<TypeDeclASTNode> &getTypeByName(const std::string &name) const;
+    const FunctionDefinitionASTNode &getFuncByName(const std::string &name) const;
 
-    const DataConstructorASTNode *getConstructorByName(const std::string &name) const;
+    const TypeDeclASTNode &getTypeByName(const std::string &name) const;
+
+    const DataConstructorASTNode &getConstructorByName(const std::string &name) const;
+
+    const TypeclassASTNode &getTypeclassByName(const std::string &name) const;
 
     const std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> &types() const;
 
@@ -62,10 +72,13 @@ public:
 
     constexpr Core &core() { return langCore; }
 
+    constexpr const Core &core() const { return langCore; }
+
 private:
     std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> declaredTypeNodes;
+    std::unordered_map<std::string, std::unique_ptr<TypeclassASTNode>> declaredTypeclasses;
     std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> definedFunctionNodes;
-    std::unordered_map<std::string, DataConstructorASTNode *> declaredDataConstructors;
+    std::unordered_map<std::string, std::reference_wrapper<const DataConstructorASTNode>> declaredDataConstructors;
 
     size_t fileIndex = 0;
     std::vector<Module> modules;

@@ -61,13 +61,15 @@ class InfixFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
     InfixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
                              std::unique_ptr<TypeInstanceASTNode> &&funcType,
-                             int precedence, Associativity assoc);
+                             Associativity assoc);
 
     constexpr FunctionUsage funcUsage() const override { return FunctionUsage::Infix; }
 
     constexpr size_t maxArgs() const override { return 2; }
 
     constexpr int operatorPrecedence() const { return precedence; }
+
+    void setPrecedence(int newPrecedence) { precedence = newPrecedence; }
 
     constexpr Associativity associativity() const { return assoc; }
 
@@ -180,6 +182,8 @@ public:
     llvm::Function *generate(FunctionCodeGenerator &generator, const BindingMap &bindingMap) const;
 
     bool isPolymorphic() const { return declaration->functionType()->isPolymorphic(); }
+
+    bool containsClosures() const { return declaration->functionType()->containsClosures(); };
 
     bool hasOverloads() const { return implementations.size() > 1; }
 

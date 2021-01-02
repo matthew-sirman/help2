@@ -71,7 +71,7 @@ private:
     FunctionCodeGenerator &funcCodeGenerator;
 
     std::unordered_map<std::string, llvm::Value *> instantiatedParameters;
-    std::unordered_map<std::string, llvm::Argument *> parameterRootMap;
+    std::unordered_map<std::string, llvm::Value *> parameterRootMap;
 };
 
 template<Viewable NodeT>

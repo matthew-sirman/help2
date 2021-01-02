@@ -26,10 +26,6 @@ const PrimitiveType &Core::getPrimitiveType(const std::string &name) const {
     return primitiveTypeMap.at(name);
 }
 
-bool Core::builtinTypeExists(const std::string &name) const {
-    return primitiveExists(name) || builtinTypeMap.contains(name);
-}
-
 bool Core::builtinFunctionExists(const std::string &name) const {
     return builtinFunctionMap.contains(name);
 }

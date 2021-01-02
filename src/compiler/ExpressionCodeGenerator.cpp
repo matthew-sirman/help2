@@ -40,7 +40,23 @@ llvm::Value *ExpressionCodeGenerator::generate<ApplicationASTNode>(const Applica
 
 template<>
 llvm::Value *ExpressionCodeGenerator::generate<LetBindingASTNode>(const LetBindingASTNode::View &nodeView) {
+    // To execute a let binding, we first need to evaluate the expression embedded, and then add it to the
+    // parameter root list so the usage expression can access it.
+    // We know by parsing that any binders used in the expression are non-conflicting, and are also not used
+    // after the expression, so it is not necessary to remove the binder from the map afterwards or anything
 
+    // Compute the value
+    llvm::Value *boundExpr = nodeView.boundExpression->generate(*this);
+
+    // Add any binders to the map
+    BinderMap boundVars;
+    nodeView.binder->addAllBinders(boundVars);
+    for (const std::pair<const std::string, const VariablePatternASTNode *> &boundVar : boundVars) {
+        parameterRootMap[boundVar.first] = boundExpr;
+    }
+
+    // Finally, return the usage expression which will now be able to access any bound vars
+    return nodeView.usage->generate(*this);
 }
 
 template<>
@@ -82,8 +98,18 @@ llvm::Value *ExpressionCodeGenerator::generate<VariableASTNode>(const VariableAS
 
     // Follow the path down to the variable, each time performing a struct lookup followed by a bit cast
     for (const std::pair<std::string, unsigned> &pathNode : binderPath) {
-        var = context.builder()->CreateStructGEP(var, pathNode.second, "pmatchtmp");
-        var = context.builder()->CreateBitCast(var, context.lookupConstructor(pathNode.first), "pcasttmp");
+        std::optional<TypeInfo> type = context.lookupConstructor(pathNode.first);
+        var = context.builder()->CreateBitCast(
+                var,
+                llvm::PointerType::get(type->llvmType, 0),
+                "pcasttmp"
+        );
+        var = context.builder()->CreateStructGEP(var, pathNode.second + type->tagged, "pmatchtmp");
+    }
+
+    // Only dereference if there was indirection to the value
+    if (!binderPath.empty()) {
+        var = context.builder()->CreateLoad(var, "vloadtmp");
     }
 
     // Add the value to the caching map
@@ -98,6 +124,7 @@ llvm::Value *ExpressionCodeGenerator::generate<ConstructorASTNode>(const Constru
 }
 
 template<>
-llvm::Value *ExpressionCodeGenerator::generate<IntegralConstructorASTNode>(const IntegralConstructorASTNode::View &nodeView) {
+llvm::Value *
+ExpressionCodeGenerator::generate<IntegralConstructorASTNode>(const IntegralConstructorASTNode::View &nodeView) {
     return context.intValue(nodeView.value);
 }

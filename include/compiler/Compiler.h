@@ -15,6 +15,11 @@
 
 class Compiler;
 
+struct TypeInfo {
+    llvm::Type *llvmType;
+    bool tagged;
+};
+
 class CompileContext {
     friend class Compiler;
 public:
@@ -34,11 +39,11 @@ public:
 
     void addInstantiatedType(const std::string &name, llvm::Type *type);
 
-    void addConstructorType(const std::string &name, llvm::Type *type);
+    void addConstructorType(const std::string &name, llvm::Type *type, bool tagged);
 
     llvm::Type *lookupType(const std::string &name) const;
 
-    llvm::Type *lookupConstructor(const std::string &name) const;
+    std::optional<TypeInfo> lookupConstructor(const std::string &name) const;
 
     // Helpers
     llvm::IntegerType *int8Type() const;
@@ -62,7 +67,7 @@ private:
     std::unique_ptr<ParseTree> tree;
 
     std::unordered_map<std::string, llvm::Type *> instantiatedTypes;
-    std::unordered_map<std::string, llvm::Type *> instantiatedConstructors;
+    std::unordered_map<std::string, TypeInfo> instantiatedConstructors;
 };
 
 /*
