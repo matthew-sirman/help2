@@ -23,7 +23,7 @@ struct TypeInfo {
 class CompileContext {
     friend class Compiler;
 public:
-    CompileContext(std::unique_ptr<ParseTree> &&tree);
+    CompileContext(ParseTree &tree);
 
     constexpr const std::unique_ptr<llvm::LLVMContext> &context() const { return ctxContext; }
 
@@ -35,7 +35,7 @@ public:
 
     constexpr const std::unique_ptr<llvm::Module> &currentModule() const { return *ctxCurrentModule; }
 
-    constexpr const std::unique_ptr<ParseTree> &parseTree() const { return tree; }
+    constexpr const ParseTree &parseTree() const { return tree; }
 
     void addInstantiatedType(const std::string &name, llvm::Type *type);
 
@@ -64,7 +64,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<llvm::Module>> ctxModules;
     const std::unique_ptr<llvm::Module> *ctxCurrentModule;
 
-    std::unique_ptr<ParseTree> tree;
+    ParseTree &tree;
 
     std::unordered_map<std::string, llvm::Type *> instantiatedTypes;
     std::unordered_map<std::string, TypeInfo> instantiatedConstructors;
@@ -77,7 +77,7 @@ private:
  */
 class Compiler {
 public:
-    explicit Compiler(std::unique_ptr<ParseTree> &&tree);
+    explicit Compiler(ParseTree &tree);
 
     void compile();
 

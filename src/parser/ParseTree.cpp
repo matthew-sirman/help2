@@ -35,7 +35,8 @@ void ParseTree::addDataConstructor(const TypeDeclASTNode &type, std::unique_ptr<
     if (!typeExists(type.typeName())) {
         throw;
     }
-    declaredDataConstructors[constructor->name()] = *constructor;
+//    declaredDataConstructors[constructor->name()] = std::ref(*constructor);
+    declaredDataConstructors.emplace(constructor->name(), *constructor);
     declaredTypeNodes[type.typeName()]->addDataConstructor(std::move(constructor));
 }
 

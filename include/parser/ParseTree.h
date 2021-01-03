@@ -78,7 +78,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> declaredTypeNodes;
     std::unordered_map<std::string, std::unique_ptr<TypeclassASTNode>> declaredTypeclasses;
     std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> definedFunctionNodes;
-    std::unordered_map<std::string, std::reference_wrapper<const DataConstructorASTNode>> declaredDataConstructors;
+    std::unordered_map<std::string, std::reference_wrapper<DataConstructorASTNode>> declaredDataConstructors;
 
     size_t fileIndex = 0;
     std::vector<Module> modules;

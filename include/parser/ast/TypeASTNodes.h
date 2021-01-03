@@ -158,6 +158,8 @@ public:
 
     llvm::Type *generate(TypeCodeGenerator &generator, const std::vector<llvm::Type *> &bindings) const;
 
+    constexpr const std::vector<std::string> &typeVariables() const { return typeConstructorParameters; }
+
 private:
     std::vector<std::string> typeConstructorParameters;
 };
@@ -371,7 +373,7 @@ public:
 
     constexpr const TypeclassASTNode &typeclass() const { return typeclassReference; }
 
-    constexpr const TypeInstanceASTNode &instance() const { return *typeInstance; }
+    const TypeInstanceASTNode &instance() const { return *typeInstance; }
 
     friend bool operator==(const TypeclassInstanceASTNode &lhs, const TypeclassInstanceASTNode &rhs);
 
@@ -388,9 +390,9 @@ public:
     TypeclassInstanceImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<TypeclassInstanceASTNode> &&typeclass,
                                  PrerequisiteList &&prerequisites);
 
-    constexpr const TypeclassASTNode &typeclass() const { return typeclassInstance->typeclass(); }
+    const TypeclassASTNode &typeclass() const { return typeclassInstance->typeclass(); }
 
-    constexpr const TypeInstanceASTNode &instance() const { return typeclassInstance->instance(); }
+    const TypeInstanceASTNode &instance() const { return typeclassInstance->instance(); }
 
     bool fullyImplemented() const;
 

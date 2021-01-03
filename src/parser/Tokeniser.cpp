@@ -13,42 +13,17 @@ std::unordered_set<char> Tokeniser::regexEscapeChars = {
         '.', '+', '*', '?', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\'
 };
 
+std::string Tokeniser::infixOpRegex;
+std::string Tokeniser::prefixOpRegex;
+
 Tokeniser::Tokeniser(std::string source, Token::LineNumber startLine)
         : source(std::move(source)), startLineNumber(startLine) {
 
 }
 
 Token Tokeniser::startToken() const {
-    return Token(source.begin(), source.end(), 1);
+    return Token(source.begin(), source.end(), startLineNumber);
 }
-
-Token Tokeniser::token(const Token &src) {
-    return Token(src.position, src.end, src.lineNumber);
-}
-
-IdentifierToken Tokeniser::identifierToken(const Token &src) {
-    return IdentifierToken(src.position, src.end, src.lineNumber);
-}
-
-IntegralToken Tokeniser::integralToken(const Token &src) {
-    return IntegralToken(src.position, src.end, src.lineNumber);
-}
-
-DecimalToken Tokeniser::decimalToken(const Token &src) {
-    return DecimalToken(src.position, src.end, src.lineNumber);
-}
-
-CharToken Tokeniser::charToken(const Token &src) {
-    return CharToken(src.position, src.end, src.lineNumber);
-}
-
-StringToken Tokeniser::stringToken(const Token &src) {
-    return StringToken(src.position, src.end, src.lineNumber);
-}
-
-//OperatorToken Tokeniser::operatorToken(const Token &src) {
-//    return OperatorToken(src.position, src.end, src.lineNumber);
-//}
 
 bool Tokeniser::tokenImport(Token &token) {
     return matchKeywordToken(token, "import");
@@ -199,7 +174,7 @@ bool Tokeniser::tokenCloseParenthesis(Token &token) {
 }
 
 bool Tokeniser::tokenIdentifier(IdentifierToken &token) {
-    return matchStringRegexToken(token, R"(\s*([a-zA-Z]\w*'*))", token.identifier, 1);
+    return matchStringRegexToken(token, R"(^\s*([a-zA-Z]\w*'*))", token.identifier, 1);
 }
 
 bool Tokeniser::tokenAnyIdentifier(IdentifierToken &token) {
@@ -271,28 +246,35 @@ PlainToken Tokeniser::scanToken(const Token &token) {
     return plain;
 }
 
+bool Tokeniser::searchFor(const Token &token, const std::string &string) {
+    return std::regex_search(token.position, token.end, std::regex(escapeRegex(string)));
+}
+
 std::vector<Tokeniser> Tokeniser::findAllStatements() const {
     std::string statement;
     std::vector<Tokeniser> statements;
-    Token::LineNumber startLine = startLineNumber;
+    Token::LineNumber line = startLineNumber;
+    Token::LineNumber startLine = line;
     for (Token::Position it = source.begin(); it != source.end(); it++) {
-        if (*it == '\n') {
-            startLine++;
-        }
         // If we see two forward slashes consecutively, then skip over the rest of the line
         // (note the short circuit stops *(it + 1) from ever being invalid)
         if (source.end() - it >= 2 && *it == '/' && *(it + 1) == '/') {
-            while (it != source.end() && *it++ != '\n') continue;
+            while (it != source.end() && *++it != '\n') continue;
             // The above will always consume exactly one newline, so we have to increment startLine again.
             // There is one exception: if the line reached the end of file, in which case we don't care about
             // startLine at any further point, so there is no hard in incrementing it.
-            startLine++;
+            line++;
+            continue;
+        }
+        if (*it == '\n') {
+            line++;
         }
         // Add the current char to the current statement
         statement.push_back(*it);
         if (*it == ';') {
             // Add this statement string to the vector
-            statements.push_back(Tokeniser(std::move(statement), startLine));
+            statements.emplace_back(std::move(statement), startLine);
+            startLine = line;
             // Create the next statement object
             statement = std::string();
         }

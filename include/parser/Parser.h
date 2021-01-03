@@ -14,21 +14,42 @@
 
 #include "Tokeniser.h"
 #include "ParseTree.h"
-#include "FileStructure.h"
+#include "../compiler/Options.h"
+
+class ErrorList {
+public:
+    using Error = std::string;
+    using ErrorStream = std::stringstream;
+
+    friend std::ostream &operator<<(std::ostream &os, const ErrorList &errorList) {
+        std::for_each(errorList->begin(), errorList->end(),
+                      [&os](const ErrorStream &es) { os << es.str() << std::endl; });
+        return os;
+    }
+
+    std::vector<ErrorStream> *operator->() {
+        return &errors;
+    }
+
+    const std::vector<ErrorStream> *operator->() const {
+        return &errors;
+    }
+
+private:
+    std::vector<ErrorStream> errors;
+};
 
 class Parser {
 public:
-    using Error = std::string;
+    Parser(Options &fileStructure, const std::filesystem::path &sourceFile);
 
-    Parser(FileStructure &fileStructure, const std::filesystem::path &sourceFile);
-
-    Parser(FileStructure &fileStructure, const std::filesystem::path &sourceFile, const std::string &source);
+    Parser(Options &fileStructure, const std::filesystem::path &sourceFile, const std::string &source);
 
     void parse(ParseTree &tree);
 
-    bool hasErrors() const { return !errorList.empty(); }
+    bool hasErrors() const { return !errorList->empty(); }
 
-    std::vector<Error> errors() const;
+    constexpr const ErrorList &errors() const { return errorList; };
 
 private:
     using TokeniseFunc = std::function<bool(Token &)>;
@@ -58,25 +79,27 @@ private:
     // Subparsers
     bool parseTypeInstance(
             Token &token, const ParseTree &tree, std::unique_ptr<TypeInstanceASTNode> &inst,
-            std::optional<std::reference_wrapper<const std::unordered_set<std::string>>> typeVars = std::nullopt
+            std::optional<std::reference_wrapper<const std::unordered_set<std::string>>> typeVars = std::nullopt,
+            bool nested = false
     );
 
     std::unique_ptr<TypeclassInstanceASTNode> parseTypeclassInstance(Token &token, const ParseTree &tree);
 
     bool parseImplicationList(Token &token, const ParseTree &tree,
-                              std::vector<std::unique_ptr<TypeclassInstanceASTNode>> &implList);
+                              PrerequisiteList &implList,
+                              bool nested = false);
 
     void parseDataConstructors(Token &token, const TypeDeclASTNode &type, ParseTree &tree,
                                const std::unordered_set<std::string> &typeVars);
 
     // bool parseFunctionDeclList()
 
-    std::stringstream &appendError(const Token &errorPoint);
+    ErrorList::ErrorStream &appendError(const Token &errorPoint);
 
-    FileStructure &fileStructure;
+    Options &options;
     std::size_t fileIndex;
     Tokeniser tokeniser;
-    std::vector<std::stringstream> errorList;
+    ErrorList errorList;
 };
 
 #endif //HELPC_PARSER_H

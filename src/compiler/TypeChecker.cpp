@@ -6,7 +6,7 @@
 
 #include "../../include/compiler/TypeChecker.h"
 
-TypeChecker::TypeChecker(const std::unique_ptr<ParseTree> &tree)
+TypeChecker::TypeChecker(ParseTree &tree)
         : tree(tree) {
 
 }
@@ -22,17 +22,17 @@ bool TypeChecker::typeCheck() const {
     // Return true if and only if every type and function type checks
 
     bool checked =
-            std::all_of(tree->types().begin(), tree->types().end(),
+            std::all_of(tree.types().begin(), tree.types().end(),
                         [this](const std::pair<const std::string, std::unique_ptr<TypeDeclASTNode>> &type) {
                             return typeCheckType(type.second);
                         }) &&
-            std::all_of(tree->functions().begin(), tree->functions().end(),
+            std::all_of(tree.functions().begin(), tree.functions().end(),
                         [this](const std::pair<const std::string, std::unique_ptr<FunctionDefinitionASTNode>> &func) {
                             return typeCheckFunction(func.second);
                         });
 
     if (checked) {
-        tree->markAsTypeChecked();
+        tree.markAsTypeChecked();
     }
     return checked;
 }
@@ -92,7 +92,7 @@ bool TypeChecker::typeCheckTypeInstance(const std::unique_ptr<TypeInstanceASTNod
             const PrefixTypeInstanceASTNode *prefixInstance = dynamic_cast<PrefixTypeInstanceASTNode *>(instance.get());
 
             // Fail if applied to an invalid number of arguments
-            if (tree->getTypeByName(prefixInstance->typeName())->args() != prefixInstance->parameters().size()) {
+            if (tree.getTypeByName(prefixInstance->typeName()).args() != prefixInstance->parameters().size()) {
                 logError("Invalid number of arguments for type '" + prefixInstance->typeName() + "'.", prefixInstance);
                 return false;
             }
@@ -186,7 +186,7 @@ void TypeChecker::logError(const std::string &message) const {
 }
 
 void TypeChecker::logError(const std::string &message, const ASTNode *node) const {
-    std::cerr << "[Type Error] " << tree->getFilePath(node->fileIndex()) << " (line " << node->lineNumber()
+    std::cerr << "[Type Error] " << tree.getFilePath(node->fileIndex()) << " (line " << node->lineNumber()
               << "): " << message << std::endl;
 
 }

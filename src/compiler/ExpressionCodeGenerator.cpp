@@ -62,7 +62,7 @@ llvm::Value *ExpressionCodeGenerator::generate<LetBindingASTNode>(const LetBindi
 template<>
 llvm::Value *ExpressionCodeGenerator::generate<FunctionASTNode>(const FunctionASTNode::View &nodeView) {
     // TODO: Provide appropriate bindings
-    llvm::Function *func = context.parseTree()->getFuncByName(nodeView.name)->generate(funcCodeGenerator, {});
+    llvm::Function *func = context.parseTree().getFuncByName(nodeView.name).generate(funcCodeGenerator, {});
     // If the function is nullary, we call it and return the value (like a nullary application)
     if (nodeView.nullary) {
         return context.builder()->CreateCall(func, {}, "calltmp");

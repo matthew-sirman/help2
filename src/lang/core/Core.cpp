@@ -5,6 +5,8 @@
 #include "../../../include/lang/core/Core.h"
 #include "../../../include/lang/core/CoreBuilder.h"
 
+#include <iostream>
+
 Core Core::create() {
     Core core;
     CoreBuilder builder(core);
@@ -32,6 +34,14 @@ bool Core::builtinFunctionExists(const std::string &name) const {
 
 const std::unique_ptr<BuiltinFunction> &Core::getBuiltinFunction(const std::string &name) const {
     return builtinFunctionMap.at(name);
+}
+
+const PrimitiveType &Core::unitType() const {
+    if (!unit.has_value()) {
+        std::cerr << "DEVELOPER: No unit type in core!" << std::endl;
+        throw;
+    }
+    return unit.value();
 }
 
 void Core::addPrimitiveType(PrimitiveType &&prim) {

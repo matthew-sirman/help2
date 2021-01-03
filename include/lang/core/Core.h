@@ -38,6 +38,8 @@ private:
 
     std::unordered_map<std::string, PrimitiveType> primitiveTypeMap;
     std::unordered_map<std::string, std::unique_ptr<BuiltinFunction>> builtinFunctionMap;
+
+    std::optional<PrimitiveType> unit;
 };
 
 #endif //HELP2_CORE_H

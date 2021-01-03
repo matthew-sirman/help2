@@ -39,7 +39,7 @@ FunctionCodeGenerator::generateImplementationBlock(const FunctionImplASTNode::Vi
 
 llvm::Function *
 FunctionCodeGenerator::generateDefinition(const FunctionDefinitionASTNode::View &nodeView, const BindingMap &bindingMap) {
-    std::string moduleName = context.parseTree()->getModuleName(nodeView.declaration->fileIndex());
+    std::string moduleName = context.parseTree().getModuleName(nodeView.declaration->fileIndex());
     context.setCurrentModule(moduleName);
 
     llvm::Function *function = context.currentModule()->getFunction(nodeView.declaration->name());

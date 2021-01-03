@@ -162,6 +162,21 @@ concept AnyTokenFunction = requires {
     // TokenFunction<FType, OperatorToken>;
 };
 
+template<typename T>
+struct UnaryFunctionTraits;
+
+template<typename Ret, typename Arg>
+struct UnaryFunctionTraits<Ret(Arg)> {
+    using ReturnType = Ret;
+    using ArgumentType = Arg;
+};
+
+template<typename Ret, typename Arg>
+struct UnaryFunctionTraits<std::function<Ret(Arg)>> {
+    using ReturnType = Ret;
+    using ArgumentType = Arg;
+};
+
 using OperatorSet = std::unordered_set<std::string>;
 
 /*
@@ -170,23 +185,12 @@ using OperatorSet = std::unordered_set<std::string>;
  */
 class Tokeniser {
 public:
-    Tokeniser(std::string source, Token::LineNumber startLine = 1);
+    explicit Tokeniser(std::string source, Token::LineNumber startLine = 1);
 
     Token startToken() const;
 
-    static Token token(const Token &src);
-
-    static IdentifierToken identifierToken(const Token &src);
-
-    static IntegralToken integralToken(const Token &src);
-
-    static DecimalToken decimalToken(const Token &src);
-
-    static CharToken charToken(const Token &src);
-
-    static StringToken stringToken(const Token &src);
-
-    // static OperatorToken operatorToken(const Token &src);
+    template<TokenType _TokTy>
+    static _TokTy token(const Token &src);
 
     // Token: 'import'
     static bool tokenImport(Token &token);
@@ -313,6 +317,9 @@ public:
     // Find the next plain token
     static PlainToken scanToken(const Token &token);
 
+    // Search for a particular string
+    static bool searchFor(const Token &token, const std::string &string);
+
     // Composes a set of token scans which must all succeed for the token to be updated. The token
     // must be passable to each of the functions, and so must be the most derived types, and certain
     // compositions will be invalid (e.g. matching an int literal then a decimal literal)
@@ -390,6 +397,11 @@ private:
     static std::string prefixOpRegex;
 };
 
+template<TokenType _TokTy>
+_TokTy Tokeniser::token(const Token &src) {
+    return _TokTy(src.position, src.end, src.lineNumber);
+}
+
 template<TokenType _TokTy, TokenFunction<_TokTy>... _FTypes>
 bool Tokeniser::compose(_TokTy &token, const _FTypes &...fns) {
     // Store the start state of the token
@@ -464,7 +476,8 @@ bool Tokeniser::internalPeek(const _TokTy &token, const _Head &headFn, const _Ta
 template<TokenType _TokTy, AnyTokenFunction _Head>
 bool Tokeniser::internalPeek(const _TokTy &token, const _Head &headFn) {
     // In this case, we need to make a new token to pass to the function
-    typename _Head::argument_type newToken(token.position, token.end, token.lineNumber);
+    using ArgToken = typename std::remove_reference<typename UnaryFunctionTraits<_Head>::ArgumentType>::type;
+    ArgToken newToken = Tokeniser::token<ArgToken>(token);
     return headFn(newToken);
 }
 
@@ -481,7 +494,8 @@ bool Tokeniser::internalPeekAny(const _TokTy &token, const _Head &headFn, const 
 template<TokenType _TokTy, AnyTokenFunction _Head>
 bool Tokeniser::internalPeekAny(const _TokTy &token, const _Head &headFn) {
     // In this case, we need to make a new token to pass to the function
-    typename _Head::argument_type newToken(token.position, token.end, token.lineNumber);
+    using ArgToken = typename std::remove_reference<typename UnaryFunctionTraits<_Head>::ArgumentType>::type;
+    ArgToken newToken = Tokeniser::token<ArgToken>(token);
     return headFn(newToken);
 }
 

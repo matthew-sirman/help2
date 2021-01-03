@@ -13,7 +13,9 @@
 
 class FileStructure {
 public:
-    void addIncludeDir(std::filesystem::path dir);
+    FileStructure() = default;
+
+    void addIncludeDir(const std::filesystem::path& dir);
 
     void addExtension(std::string ext);
 
@@ -28,7 +30,7 @@ public:
     const std::filesystem::path &getFileName(std::size_t index) const;
 
 private:
-    std::unordered_set<std::filesystem::path> includeDirs;
+    std::unordered_set<std::string> includeDirs;
     std::unordered_set<std::string> extensions;
     std::vector<std::filesystem::path> programFiles;
 };

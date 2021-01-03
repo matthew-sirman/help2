@@ -22,6 +22,7 @@ enum class FunctionUsage {
 class FunctionDeclASTNode : public ASTNode {
 public:
     FunctionDeclASTNode(size_t lineNum, size_t fileIndex, std::string name,
+                        PrerequisiteList &&prerequisites,
                         std::unique_ptr<TypeInstanceASTNode> &&funcType);
 
     const std::string &name() const { return funcName; }
@@ -35,6 +36,7 @@ public:
 protected:
     std::string funcName;
     std::unique_ptr<TypeInstanceASTNode> funcType;
+    PrerequisiteList prerequisites;
 };
 
 /*
@@ -44,6 +46,7 @@ protected:
 class PrefixFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
     PrefixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                              PrerequisiteList &&prerequisites,
                               std::unique_ptr<TypeInstanceASTNode> &&funcType);
 
     constexpr FunctionUsage funcUsage() const override { return FunctionUsage::Prefix; }
@@ -60,6 +63,7 @@ enum class Associativity;
 class InfixFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
     InfixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                             PrerequisiteList &&prerequisites,
                              std::unique_ptr<TypeInstanceASTNode> &&funcType,
                              Associativity assoc);
 
@@ -86,6 +90,7 @@ private:
 class ValueFunctionDeclASTNode : public FunctionDeclASTNode {
 public:
     ValueFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                             PrerequisiteList &&prerequisites,
                              std::unique_ptr<TypeInstanceASTNode> &&valueType);
 
     constexpr FunctionUsage funcUsage() const override { return FunctionUsage::Value; }

@@ -2,10 +2,10 @@
 // Created by matthew on 02/01/2021.
 //
 
-#include "../../include/parser/FileStructure.h"
+#include "../../include/compiler/FileStructure.h"
 
-void FileStructure::addIncludeDir(std::filesystem::path dir) {
-    includeDirs.insert(std::move(dir));
+void FileStructure::addIncludeDir(const std::filesystem::path &dir) {
+    includeDirs.insert(dir.generic_string());
 }
 
 void FileStructure::addExtension(std::string ext) {
@@ -19,12 +19,12 @@ void FileStructure::addDefaultExtensions() {
 
 std::optional<std::filesystem::path> FileStructure::searchForFile(const std::filesystem::path &file) const {
     // Check each include directory
-    for (const std::filesystem::path &include : includeDirs) {
+    for (const std::string &include : includeDirs) {
         std::filesystem::path filePath = include / file;
         // Check for each possible extension
         for (const std::string &ext : extensions) {
             filePath.replace_extension(ext);
-            if (std::filesystem::exists(filePath)) {
+            if (std::filesystem::is_regular_file(filePath)) {
                 return filePath;
             }
         }
@@ -34,13 +34,13 @@ std::optional<std::filesystem::path> FileStructure::searchForFile(const std::fil
 
 std::optional<std::filesystem::path> FileStructure::searchForQualifiedFile(const std::filesystem::path &path) const {
     // First check for the absolute file path
-    if (std::filesystem::exists(path)) {
+    if (std::filesystem::is_regular_file(path)) {
         return path;
     }
     // Otherwise check in each include directory
-    for (const std::filesystem::path &include : includeDirs) {
+    for (const std::string &include : includeDirs) {
         std::filesystem::path filePath = include / path;
-        if (std::filesystem::exists(filePath)) {
+        if (std::filesystem::is_regular_file(filePath)) {
             return filePath;
         }
     }

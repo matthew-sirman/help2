@@ -11,12 +11,12 @@
 
 class TypeChecker {
 public:
-    TypeChecker(const std::unique_ptr<ParseTree> &tree);
+    TypeChecker(ParseTree &tree);
 
     bool typeCheck() const;
 
 private:
-    const std::unique_ptr<ParseTree> &tree;
+    ParseTree &tree;
 
     bool typeCheckType(const std::unique_ptr<TypeDeclASTNode> &type) const;
 

@@ -10,14 +10,17 @@
 
 
 FunctionDeclASTNode::FunctionDeclASTNode(size_t lineNum, size_t fileIndex, std::string name,
+                                         PrerequisiteList &&prerequisites,
                                          std::unique_ptr<TypeInstanceASTNode> &&funcType)
-        : ASTNode(lineNum, fileIndex), funcName(std::move(name)), funcType(std::move(funcType)) {
+        : ASTNode(lineNum, fileIndex), funcName(std::move(name)), funcType(std::move(funcType)),
+          prerequisites(std::move(prerequisites)) {
 
 }
 
 PrefixFunctionDeclASTNode::PrefixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                                                     PrerequisiteList &&prerequisites,
                                                      std::unique_ptr<TypeInstanceASTNode> &&funcType)
-        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(funcType)) {
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(prerequisites), std::move(funcType)) {
 
 }
 
@@ -37,15 +40,18 @@ size_t PrefixFunctionDeclASTNode::maxArgs() const {
 constexpr int defaultPrecedence = 5;
 
 InfixFunctionDeclASTNode::InfixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                                                   PrerequisiteList &&prerequisites,
                                                    std::unique_ptr<TypeInstanceASTNode> &&funcType,
                                                    Associativity assoc)
-        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(funcType)), precedence(defaultPrecedence), assoc(assoc) {
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(prerequisites), std::move(funcType)),
+          precedence(defaultPrecedence), assoc(assoc) {
 
 }
 
 ValueFunctionDeclASTNode::ValueFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                                                   PrerequisiteList &&prerequisites,
                                                    std::unique_ptr<TypeInstanceASTNode> &&valueType)
-        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(valueType)) {
+        : FunctionDeclASTNode(lineNum, fileIndex, name, std::move(prerequisites), std::move(valueType)) {
 
 }
 

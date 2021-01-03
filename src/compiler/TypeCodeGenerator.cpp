@@ -138,7 +138,7 @@ llvm::Type *TypeCodeGenerator::generate<TypeDeclASTNode>(const TypeDeclASTNode::
     }
 
     // Set the current module to whichever this type is declared it
-    context.setCurrentModule(context.parseTree()->getModuleName(nodeView.fileIndex));
+    context.setCurrentModule(context.parseTree().getModuleName(nodeView.fileIndex));
 
     // Construct a map for the bindings which should appear in order
     BindingMap bindingMap;
@@ -216,9 +216,9 @@ llvm::Type *TypeCodeGenerator::generate<PrefixTypeInstanceASTNode>(const PrefixT
     }
 
     // Instantiate this type with the new found dependencies
-    return dynamic_cast<PrefixTypeDeclASTNode *>(
-            context.parseTree()->getTypeByName(nodeView.name).get()
-    )->generate(*this, dependencies);
+    return dynamic_cast<const PrefixTypeDeclASTNode &>(
+            context.parseTree().getTypeByName(nodeView.name)
+    ).generate(*this, dependencies);
 }
 
 template<>
@@ -233,9 +233,9 @@ llvm::Type *TypeCodeGenerator::generate<InfixTypeInstanceASTNode>(const InfixTyp
     }
 
     // Instantiate this type with the new found dependencies
-    return dynamic_cast<InfixTypeDeclASTNode *>(
-            context.parseTree()->getTypeByName(nodeView.name).get()
-    )->generate(*this, lhs, rhs);
+    return dynamic_cast<const InfixTypeDeclASTNode &>(
+            context.parseTree().getTypeByName(nodeView.name)
+    ).generate(*this, lhs, rhs);
 }
 
 template<>

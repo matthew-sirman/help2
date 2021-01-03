@@ -213,7 +213,7 @@ UserTypeInstanceASTNode::UserTypeInstanceASTNode(size_t lineNum, size_t fileInde
 }
 
 void PrefixTypeInstanceInterface::bindParameter(std::unique_ptr<TypeInstanceASTNode> &&parameter) {
-    parameters.push_back(std::move(parameter));
+    params.push_back(std::move(parameter));
 }
 
 PolymorphicTypeInstanceASTNode::PolymorphicTypeInstanceASTNode(size_t lineNum, size_t fileIndex,
@@ -359,6 +359,20 @@ bool TypeclassASTNode::hasMethod(const std::string &methodName) const {
     return typeclassMethods.contains(methodName);
 }
 
+TypeclassInstanceASTNode::TypeclassInstanceASTNode(size_t lineNum, size_t fileIndex, const TypeclassASTNode &typeclass,
+                                                   std::unique_ptr<TypeInstanceASTNode> &&typeInstance)
+        : ASTNode(lineNum, fileIndex), typeclassReference(typeclass), typeInstance(std::move(typeInstance)) {
+
+}
+
+TypeclassInstanceImplASTNode::TypeclassInstanceImplASTNode(size_t lineNum, size_t fileIndex,
+                                                           std::unique_ptr<TypeclassInstanceASTNode> &&typeclass,
+                                                           PrerequisiteList &&prerequisites)
+        : ASTNode(lineNum, fileIndex), typeclassInstance(std::move(typeclass)),
+          prerequisites(std::move(prerequisites)) {
+
+}
+
 TypeclassInstanceImplASTNode &TypeclassASTNode::addInstance(std::unique_ptr<TypeclassInstanceImplASTNode> instance) {
     for (const std::unique_ptr<TypeclassInstanceImplASTNode> &inst : instances) {
         if (*inst->typeclassInstance == *instance->typeclassInstance) {
@@ -377,15 +391,20 @@ bool operator==(const TypeclassInstanceASTNode &lhs, const TypeclassInstanceASTN
 }
 
 bool operator!=(const TypeclassInstanceASTNode &lhs, const TypeclassInstanceASTNode &rhs) {
-    return false;
+    return !(lhs == rhs);
 }
 
 bool TypeclassInstanceImplASTNode::fullyImplemented() const {
-    if (implementations.size() != typeclass->typeclass().methodCount()) {
+    if (implementations.size() != typeclassInstance->typeclass().methodCount()) {
         return false;
     }
     return std::all_of(implementations.begin(), implementations.end(),
                        [this](const std::pair<const std::string, std::unique_ptr<FunctionImplASTNode>> &impl) {
-        return typeclass->typeclass().hasMethod(impl.first);
-    });
+                           return typeclassInstance->typeclass().hasMethod(impl.first);
+                       });
+}
+
+void TypeclassInstanceImplASTNode::addImplementation(const std::string &name,
+                                                     std::unique_ptr<FunctionImplASTNode> &&implementation) {
+    implementations[name] = std::move(implementation);
 }

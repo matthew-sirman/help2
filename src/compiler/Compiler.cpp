@@ -10,13 +10,13 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/IPO.h>
 
-CompileContext::CompileContext(std::unique_ptr<ParseTree> &&tree)
+CompileContext::CompileContext(ParseTree &tree)
         : ctxContext(std::make_unique<llvm::LLVMContext>()),
           ctxBuilder(std::make_unique<llvm::IRBuilder<>>(*ctxContext)),
           ctxCurrentModule(nullptr),
-          tree(std::move(tree)) {
+          tree(tree) {
     // Create each module present in the parse tree
-    for (const ParseTree::Module &ptMod : this->tree->allModules()) {
+    for (const ParseTree::Module &ptMod : this->tree.allModules()) {
         std::unique_ptr<llvm::Module> module = std::make_unique<llvm::Module>(ptMod.moduleName, *ctxContext);
         module->setSourceFileName(ptMod.fileName.generic_string());
         ctxModules[ptMod.moduleName] = std::move(module);
@@ -74,20 +74,20 @@ llvm::ConstantInt *CompileContext::intValue(long long int val) const {
     return llvm::ConstantInt::get(int64Type(), val);
 }
 
-Compiler::Compiler(std::unique_ptr<ParseTree> &&tree)
-        : context(std::move(tree)) {
+Compiler::Compiler(ParseTree &tree)
+        : context(tree) {
 
 }
 
 
 void Compiler::compile() {
     // First, we build the core
-    CoreBuilder(context.tree->core()).build(*context.context());
+    CoreBuilder(context.tree.core()).build(*context.context());
 
     TypeCodeGenerator typeGenerator(context);
     FunctionCodeGenerator functionGenerator(context, typeGenerator);
 
-    for (const std::pair<const std::string, std::unique_ptr<FunctionDefinitionASTNode>> &func : context.tree->functions()) {
+    for (const std::pair<const std::string, std::unique_ptr<FunctionDefinitionASTNode>> &func : context.tree.functions()) {
         // Skip over polymorphic functions - they will be instantiated on demand from concrete functions
         // Note that it is impossible to ever "add" polymorphism in a function, i.e. a concrete function
         // can never become polymorphic in the body.
