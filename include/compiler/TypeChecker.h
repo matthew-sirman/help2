@@ -11,33 +11,35 @@
 
 class TypeChecker {
 public:
-    TypeChecker(ParseTree &tree);
+    explicit TypeChecker(ParseTree &tree);
 
-    bool typeCheck() const;
+    bool typeCheck();
+
+    constexpr const ErrorList &errors() const { return errorList; };
 
 private:
     ParseTree &tree;
 
-    bool typeCheckType(const std::unique_ptr<TypeDeclASTNode> &type) const;
+    bool typeCheckFunction(const FunctionDefinitionASTNode &func);
 
-    bool typeCheckFunction(const std::unique_ptr<FunctionDefinitionASTNode> &func) const;
+    bool typeCheckTypeInstance(const TypeInstanceASTNode &instance);
 
-    bool typeCheckConstructor(const std::unique_ptr<DataConstructorASTNode> &cons) const;
+    bool typeCheckFunctionImplementation(const FunctionImplASTNode &impl,
+                                         const TypeInstanceASTNode &type);
 
-    bool typeCheckTypeInstance(const std::unique_ptr<TypeInstanceASTNode> &instance) const;
+    bool typeCheckPattern(const PatternASTNode &pattern,
+                          const TypeInstanceASTNode &type);
 
-    bool typeCheckFunctionImplementation(const std::unique_ptr<FunctionImplASTNode> &impl,
-                                         const std::unique_ptr<TypeInstanceASTNode> &type) const;
+    bool typeCheckExpression(const ExpressionASTNode &expr,
+                             const TypeInstanceASTNode &type);
 
-    bool typeCheckPattern(const std::unique_ptr<PatternASTNode> &pattern,
-                          TypeInstanceASTNode *type) const;
+    bool typeMatch(const TypeInstanceASTNode &inst, const TypeDeclASTNode &type);
 
-    bool typeCheckExpression(const std::unique_ptr<ExpressionASTNode> &expr,
-                             TypeInstanceASTNode *type) const;
+    std::ostream &appendError();
 
-    void logError(const std::string &message) const;
+    std::ostream &appendError(const ASTNode &node);
 
-    void logError(const std::string &message, const ASTNode *node) const;
+    ErrorList errorList;
 };
 
 

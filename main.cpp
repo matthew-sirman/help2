@@ -14,13 +14,17 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    Options::setup();
+
     Options options;
     options.parseArguments(argc, argv);
+
+    Tokeniser::setTokeniserOperatorSet({ "+", "-", "*", "/", "%", ":" });
 
     for (const std::filesystem::path &sourceFile : options.sourceFiles()) {
         Parser parser(options, sourceFile);
 
-        ParseTree tree(Core::create());
+        ParseTree tree(Core::create(), options);
         parser.parse(tree);
 
         if (parser.hasErrors()) {
@@ -28,23 +32,23 @@ int main(int argc, char *argv[]) {
             std::cerr << parser.errors();
             return 0;
         }
+
+        TypeChecker typeChecker(tree);
+
+        if (!typeChecker.typeCheck()) {
+            std::cerr << "Found type errors in  " << sourceFile << ":" << std::endl;
+            std::cerr << typeChecker.errors();
+            return 0;
+        }
+
+        /*
+        Compiler compiler(tree);
+
+        compiler.compile();
+         */
     }
 
     return 0;
-
-    /*
-    TypeChecker typeChecker(tree);
-
-    if (typeChecker.typeCheck()) {
-        std::cout << "Success!" << std::endl;
-    }
-
-    Compiler compiler(tree);
-
-    compiler.compile();
-
-    return 0;
-     */
 }
 
 #pragma clang diagnostic pop

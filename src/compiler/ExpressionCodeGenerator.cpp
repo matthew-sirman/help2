@@ -51,8 +51,8 @@ llvm::Value *ExpressionCodeGenerator::generate<LetBindingASTNode>(const LetBindi
     // Add any binders to the map
     BinderMap boundVars;
     nodeView.binder->addAllBinders(boundVars);
-    for (const std::pair<const std::string, const VariablePatternASTNode *> &boundVar : boundVars) {
-        parameterRootMap[boundVar.first] = boundExpr;
+    for (BinderMap::const_iterator it = boundVars.begin(); it != boundVars.end(); it++) {
+        parameterRootMap[it->first] = boundExpr;
     }
 
     // Finally, return the usage expression which will now be able to access any bound vars
@@ -70,19 +70,21 @@ llvm::Value *ExpressionCodeGenerator::generate<FunctionASTNode>(const FunctionAS
     return func;
 }
 
+/*
 template<>
 llvm::Value *ExpressionCodeGenerator::generate<BuiltinFunctionASTNode>(const BuiltinFunctionASTNode::View &nodeView) {
     return nodeView.func->generate(context);
 }
+ */
 
 template<>
 llvm::Value *ExpressionCodeGenerator::generate<VariableASTNode>(const VariableASTNode::View &nodeView) {
     // Don't recompute a parameter value (this may involve multiple pointer indirections)
-    if (instantiatedParameters.contains(nodeView.variableRef->name())) {
-        return instantiatedParameters[nodeView.variableRef->name()];
+    if (instantiatedParameters.contains(nodeView.variableRef.name())) {
+        return instantiatedParameters[nodeView.variableRef.name()];
     }
     // Start at the base node of this variable
-    const PatternASTNode *node = nodeView.variableRef;
+    const PatternASTNode *node = &nodeView.variableRef;
 
     std::list<std::pair<std::string, unsigned>> binderPath;
 
@@ -94,7 +96,7 @@ llvm::Value *ExpressionCodeGenerator::generate<VariableASTNode>(const VariableAS
     }
 
     // Start with the parameter
-    llvm::Value *var = parameterRootMap[nodeView.variableRef->name()];
+    llvm::Value *var = parameterRootMap[nodeView.variableRef.name()];
 
     // Follow the path down to the variable, each time performing a struct lookup followed by a bit cast
     for (const std::pair<std::string, unsigned> &pathNode : binderPath) {
@@ -113,15 +115,17 @@ llvm::Value *ExpressionCodeGenerator::generate<VariableASTNode>(const VariableAS
     }
 
     // Add the value to the caching map
-    instantiatedParameters[nodeView.variableRef->name()] = var;
+    instantiatedParameters[nodeView.variableRef.name()] = var;
 
     return var;
 }
 
+/*
 template<>
 llvm::Value *ExpressionCodeGenerator::generate<ConstructorASTNode>(const ConstructorASTNode::View &nodeView) {
 
 }
+ */
 
 template<>
 llvm::Value *

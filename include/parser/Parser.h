@@ -14,30 +14,6 @@
 
 #include "Tokeniser.h"
 #include "ParseTree.h"
-#include "../compiler/Options.h"
-
-class ErrorList {
-public:
-    using Error = std::string;
-    using ErrorStream = std::stringstream;
-
-    friend std::ostream &operator<<(std::ostream &os, const ErrorList &errorList) {
-        std::for_each(errorList->begin(), errorList->end(),
-                      [&os](const ErrorStream &es) { os << es.str() << std::endl; });
-        return os;
-    }
-
-    std::vector<ErrorStream> *operator->() {
-        return &errors;
-    }
-
-    const std::vector<ErrorStream> *operator->() const {
-        return &errors;
-    }
-
-private:
-    std::vector<ErrorStream> errors;
-};
 
 class Parser {
 public:
@@ -57,6 +33,8 @@ private:
     static std::string loadSourceFile(const std::filesystem::path &sourcePath);
 
     // Top level
+    bool parseModule(Token &token);
+
     void parseImport(Token &token, ParseTree &tree);
 
     bool parseAnyFunctionDecl(Token &token, const ParseTree &tree, std::unique_ptr<FunctionDeclASTNode> &function);
@@ -71,8 +49,6 @@ private:
     void parseTypeclass(Token &token, ParseTree &tree);
 
     void parseTypeclassInstanceDecl(Token &token, ParseTree &tree);
-
-    std::unique_ptr<FunctionImplASTNode> parseImplementation(Token &token, const ParseTree &tree);
 
     std::unique_ptr<FunctionImplASTNode> parseImplementation(Token &token, const ParseTree &tree, std::string &name);
 
@@ -92,7 +68,17 @@ private:
     void parseDataConstructors(Token &token, const TypeDeclASTNode &type, ParseTree &tree,
                                const std::unordered_set<std::string> &typeVars);
 
-    // bool parseFunctionDeclList()
+    bool parsePattern(Token &token, const ParseTree &tree, std::unique_ptr<PatternASTNode> &pattern,
+                      BinderMap &binders, bool nested = false);
+
+    bool parseExpression(Token &token, const ParseTree &tree, BinderMap &binders,
+                         std::unique_ptr<ExpressionASTNode> &expr, bool nested = false, int precedence = 0);
+
+    std::unique_ptr<LetBindingASTNode> parseLetBinding(Token &token, const ParseTree &tree, BinderMap &binders,
+                                                       bool nested);
+
+    std::unique_ptr<LambdaExpressionASTNode> parseLambda(Token &token, const ParseTree &tree, BinderMap &binders,
+                                                         bool nested);
 
     ErrorList::ErrorStream &appendError(const Token &errorPoint);
 

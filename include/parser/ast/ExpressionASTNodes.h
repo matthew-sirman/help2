@@ -21,9 +21,7 @@ enum class ExpressionType {
     Application,
     LetBinding,
     Function,
-    InlineFunction,
     Variable,
-    Constructor,
     PrimitiveConstructor
 };
 
@@ -53,6 +51,10 @@ public:
     llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
 
     constexpr ExpressionType type() const override { return ExpressionType::Lambda; }
+
+    const PatternASTNode &binderPattern() const { return *binder; }
+
+    const ExpressionASTNode &bodyExpression() const { return *expression; }
 
 private:
     std::unique_ptr<PatternASTNode> binder;
@@ -103,8 +105,10 @@ public:
 
     constexpr ExpressionType type() const override { return ExpressionType::LetBinding; }
 
+    const ExpressionASTNode &usageExpression() const { return *usage; }
+
 private:
-    // Bound variable (var)
+    // Bound variable(s) (var)
     std::unique_ptr<PatternASTNode> binder;
     // Bound expression (e1) and usage (e2)
     std::unique_ptr<ExpressionASTNode> boundExpression, usage;
@@ -123,6 +127,8 @@ public:
 
     constexpr ExpressionType type() const override { return ExpressionType::Function; }
 
+    constexpr const std::string &functionName() const { return name; }
+
     constexpr bool isNullary() const { return nullary; }
 
 private:
@@ -130,6 +136,7 @@ private:
     bool nullary;
 };
 
+/*
 class BuiltinFunctionASTNode : public ExpressionASTNode {
 public:
     struct View {
@@ -145,23 +152,25 @@ public:
 private:
     const std::unique_ptr<BuiltinFunction> &func;
 };
+ */
 
 class VariableASTNode : public ExpressionASTNode {
 public:
     struct View {
-        const VariablePatternASTNode *variableRef;
+        const VariablePatternASTNode &variableRef;
     };
 
-    VariableASTNode(size_t lineNum, size_t fileIndex, const VariablePatternASTNode *variableRef);
+    VariableASTNode(size_t lineNum, size_t fileIndex, const VariablePatternASTNode &variableRef);
 
     llvm::Value *generate(ExpressionCodeGenerator &generator) const override;
 
     constexpr ExpressionType type() const override { return ExpressionType::Variable; }
 
 private:
-    const VariablePatternASTNode *variableRef;
+    const VariablePatternASTNode &variableRef;
 };
 
+/*
 class ConstructorASTNode : public ExpressionASTNode {
 public:
     struct View {
@@ -177,6 +186,7 @@ public:
 private:
     std::string name;
 };
+ */
 
 class PrimitiveConstructorASTNode : public ExpressionASTNode {
 public:

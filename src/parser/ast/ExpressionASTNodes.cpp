@@ -65,6 +65,7 @@ llvm::Value *FunctionASTNode::generate(ExpressionCodeGenerator &generator) const
     });
 }
 
+/*
 BuiltinFunctionASTNode::BuiltinFunctionASTNode(size_t lineNum, size_t fileIndex, const std::unique_ptr<BuiltinFunction> &func)
         : ExpressionASTNode(lineNum, fileIndex), func(func) {
 
@@ -75,8 +76,9 @@ llvm::Value *BuiltinFunctionASTNode::generate(ExpressionCodeGenerator &generator
             .func = func
     });
 }
+ */
 
-VariableASTNode::VariableASTNode(size_t lineNum, size_t fileIndex, const VariablePatternASTNode *variableRef)
+VariableASTNode::VariableASTNode(size_t lineNum, size_t fileIndex, const VariablePatternASTNode &variableRef)
         : ExpressionASTNode(lineNum, fileIndex), variableRef(variableRef) {
 
 }
@@ -87,6 +89,7 @@ llvm::Value *VariableASTNode::generate(ExpressionCodeGenerator &generator) const
     });
 }
 
+/*
 ConstructorASTNode::ConstructorASTNode(size_t lineNum, size_t fileIndex, std::string name)
         : ExpressionASTNode(lineNum, fileIndex), name(std::move(name)) {
 
@@ -97,6 +100,7 @@ llvm::Value *ConstructorASTNode::generate(ExpressionCodeGenerator &generator) co
             .name = name
     });
 }
+ */
 
 PrimitiveConstructorASTNode::PrimitiveConstructorASTNode(size_t lineNum, size_t fileIndex)
         : ExpressionASTNode(lineNum, fileIndex) {

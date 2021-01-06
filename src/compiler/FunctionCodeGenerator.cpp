@@ -27,8 +27,8 @@ FunctionCodeGenerator::generateImplementationBlock(const FunctionImplASTNode::Vi
     for (size_t i = 0; i < nodeView.patterns.size(); i++) {
         BinderMap patternVariables;
         nodeView.patterns[i]->addAllBinders(patternVariables);
-        for (const std::pair<const std::string, const VariablePatternASTNode *> &var : patternVariables) {
-            expressionGenerator.addParameterRoot(var.first, nodeView.parentFunction->getArg(i));
+        for (BinderMap::const_iterator it = patternVariables.begin(); it != patternVariables.end(); ++it) {
+            expressionGenerator.addParameterRoot(it->first, nodeView.parentFunction->getArg(i));
         }
     }
 
@@ -51,7 +51,7 @@ FunctionCodeGenerator::generateDefinition(const FunctionDefinitionASTNode::View 
 
     // Otherwise generate any function type dependencies. We know that we are not generating a polymorphic function,
     // so the type is concrete
-    llvm::Type *type = nodeView.declaration->functionType()->instantiate(typeCodeGenerator, bindingMap);
+    llvm::Type *type = nodeView.declaration->functionType().instantiate(typeCodeGenerator, bindingMap);
     llvm::FunctionType *fType;
 
     if (type->isFunctionTy()) {

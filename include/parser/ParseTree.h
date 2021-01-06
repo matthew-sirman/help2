@@ -13,8 +13,32 @@
 #include "ast/FunctionASTNodes.h"
 
 #include "../lang/core/Core.h"
+#include "../compiler/Options.h"
 
 class TypeChecker;
+
+class ErrorList {
+public:
+    using Error = std::string;
+    using ErrorStream = std::stringstream;
+
+    friend std::ostream &operator<<(std::ostream &os, const ErrorList &errorList) {
+        std::for_each(errorList->begin(), errorList->end(),
+                      [&os](const ErrorStream &es) { os << es.str() << std::endl; });
+        return os;
+    }
+
+    std::vector<ErrorStream> *operator->() {
+        return &errors;
+    }
+
+    const std::vector<ErrorStream> *operator->() const {
+        return &errors;
+    }
+
+private:
+    std::vector<ErrorStream> errors;
+};
 
 class ParseTree {
     friend class TypeChecker;
@@ -25,7 +49,7 @@ public:
         std::string moduleName;
     };
 
-    ParseTree(Core &&coreModule);
+    ParseTree(Core &&coreModule, Options &options);
 
     void addFunctionDeclaration(std::unique_ptr<FunctionDeclASTNode> &&declaration);
 
@@ -40,7 +64,7 @@ public:
     TypeclassInstanceImplASTNode &addTypeclassInstance(const std::string &typeclassName,
                                                        std::unique_ptr<TypeclassInstanceImplASTNode> &&instance);
 
-    bool functionExists(const std::string &name) const;
+    bool functionExists(const std::string &name, bool includeConstructors = false) const;
 
     bool typeExists(const std::string &name) const;
 
@@ -56,9 +80,11 @@ public:
 
     const TypeclassASTNode &getTypeclassByName(const std::string &name) const;
 
-    const std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> &types() const;
+    constexpr const RefList<TypeDeclASTNode> &types() const { return typeList; }
 
-    const std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> &functions() const;
+    constexpr const RefList<TypeclassASTNode> &typeclasses() const { return typeclassList; }
+
+    constexpr const RefList<FunctionDefinitionASTNode> &functions() const { return functionList; }
 
     size_t addFile(const std::filesystem::path &fileName);
 
@@ -75,10 +101,16 @@ public:
     constexpr const Core &core() const { return langCore; }
 
 private:
+    Options &options;
+
     std::unordered_map<std::string, std::unique_ptr<TypeDeclASTNode>> declaredTypeNodes;
     std::unordered_map<std::string, std::unique_ptr<TypeclassASTNode>> declaredTypeclasses;
     std::unordered_map<std::string, std::unique_ptr<FunctionDefinitionASTNode>> definedFunctionNodes;
     std::unordered_map<std::string, std::reference_wrapper<DataConstructorASTNode>> declaredDataConstructors;
+
+    RefList<TypeDeclASTNode> typeList;
+    RefList<FunctionDefinitionASTNode> functionList;
+    RefList<TypeclassASTNode> typeclassList;
 
     size_t fileIndex = 0;
     std::vector<Module> modules;

@@ -6,6 +6,10 @@
 #define HELP2_ASTNODE_H
 
 #include <string>
+#include <vector>
+
+template<typename _Ty>
+using RefList = std::vector<std::reference_wrapper<const _Ty>>;
 
 class ASTNode {
 public:

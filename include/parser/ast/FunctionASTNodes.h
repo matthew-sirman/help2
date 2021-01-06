@@ -20,6 +20,7 @@ enum class FunctionUsage {
 };
 
 class FunctionDeclASTNode : public ASTNode {
+    friend class ParseTree;
 public:
     FunctionDeclASTNode(size_t lineNum, size_t fileIndex, std::string name,
                         PrerequisiteList &&prerequisites,
@@ -31,12 +32,20 @@ public:
 
     virtual size_t maxArgs() const = 0;
 
-    constexpr const std::unique_ptr<TypeInstanceASTNode> &functionType() const { return funcType; }
+    const TypeInstanceASTNode &functionType() const { return *funcType; }
+
+    void setVirtual() { isVirtualFunc = true; }
+
+    bool isVirtual() const { return isVirtualFunc; }
 
 protected:
+    void setSymbolicName(std::string name) { symbolicName = std::move(name); }
+
     std::string funcName;
+    std::string symbolicName;
     std::unique_ptr<TypeInstanceASTNode> funcType;
     PrerequisiteList prerequisites;
+    bool isVirtualFunc;
 };
 
 /*
@@ -107,9 +116,36 @@ public:
         llvm::Function *parentFunction;
     };
 
-    FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body);
+    FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::vector<std::unique_ptr<PatternASTNode>> &&patterns,
+                        std::unique_ptr<ExpressionASTNode> &&body);
+
+    const ExpressionASTNode &functionBody() const { return *body; }
+
+    constexpr const RefList<PatternASTNode> &parameterPatterns() const { return patternList; }
+
+    llvm::BasicBlock *generate(FunctionCodeGenerator &generator, unsigned variant, llvm::Function *parentFunction);
+
+private:
+    std::vector<std::unique_ptr<PatternASTNode>> patterns;
+    RefList<PatternASTNode> patternList;
+    std::unique_ptr<ExpressionASTNode> body;
+};
+
+/*
+class FunctionImplASTNode : public ASTNode {
+public:
+    struct View {
+        const std::vector<PatternASTNode *> &patterns;
+        const std::unique_ptr<ExpressionASTNode> &body;
+        unsigned variant;
+        llvm::Function *parentFunction;
+    };
+
+    FunctionImplASTNode(size_t lineNum, size_t fileIndex);
 
     virtual constexpr FunctionUsage functionUsage() const = 0;
+
+    void setFunctionBody(std::unique_ptr<ExpressionASTNode> &&newBody) { body = std::move(newBody); }
 
     constexpr const std::unique_ptr<ExpressionASTNode> &functionBody() const { return body; }
 
@@ -119,16 +155,18 @@ public:
 protected:
     std::unique_ptr<ExpressionASTNode> body;
 };
+ */
 
 /*
  * Prefix Function implementation syntax:
  * name [pattern0 [pattern1 ...]] => expression;
  */
+/*
 class PrefixFunctionImplASTNode : public FunctionImplASTNode {
 public:
-    PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body);
+    PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex);
 
-    PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body,
+    PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
                               std::vector<std::unique_ptr<PatternASTNode>> &&patterns);
 
     constexpr FunctionUsage functionUsage() const override { return FunctionUsage::Prefix; }
@@ -141,14 +179,16 @@ public:
 private:
     std::vector<std::unique_ptr<PatternASTNode>> patterns;
 };
+ */
 
 /*
  * Infix Function implementation syntax:
  * lPattern name rPattern => expression;
  */
+/*
 class InfixFunctionImplASTNode : public FunctionImplASTNode {
 public:
-    InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body,
+    InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
                              std::unique_ptr<PatternASTNode> &&left, std::unique_ptr<PatternASTNode> &&right);
 
     constexpr FunctionUsage functionUsage() const override { return FunctionUsage::Infix; }
@@ -163,7 +203,7 @@ public:
 private:
     std::unique_ptr<PatternASTNode> lhs, rhs;
 };
-
+ */
 
 class FunctionDefinitionASTNode {
 public:
@@ -179,22 +219,24 @@ public:
 
     const std::string &name() const { return declaration->name(); }
 
-    constexpr std::unique_ptr<FunctionDeclASTNode> &decl() { return declaration; }
+    FunctionDeclASTNode &decl() { return *declaration; }
 
-    constexpr const std::vector<std::unique_ptr<FunctionImplASTNode>> &
-    implementationVariants() const { return implementations; }
+    const FunctionDeclASTNode &decl() const { return *declaration; }
+
+    constexpr const RefList<FunctionImplASTNode> &implementationVariants() const { return implementationList; }
 
     llvm::Function *generate(FunctionCodeGenerator &generator, const BindingMap &bindingMap) const;
 
-    bool isPolymorphic() const { return declaration->functionType()->isPolymorphic(); }
+    bool isPolymorphic() const { return declaration->functionType().isPolymorphic(); }
 
-    bool containsClosures() const { return declaration->functionType()->containsClosures(); };
+    bool containsClosures() const { return declaration->functionType().containsClosures(); };
 
     bool hasOverloads() const { return implementations.size() > 1; }
 
 private:
     std::unique_ptr<FunctionDeclASTNode> declaration;
     std::vector<std::unique_ptr<FunctionImplASTNode>> implementations;
+    RefList<FunctionImplASTNode> implementationList;
 };
 
 #endif //HELP2_FUNCTIONASTNODES_H

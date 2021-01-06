@@ -21,13 +21,15 @@ public:
 
     constexpr const std::vector<std::filesystem::path> &sourceFiles() const { return fileSet; }
 
+    static void setup();
+
 private:
     FileStructure fileStruct;
     std::vector<std::filesystem::path> fileSet;
 
     bool errorFlag = false;
 
-    static const std::string includeFlag;
+    static std::string includeFlag;
 };
 
 

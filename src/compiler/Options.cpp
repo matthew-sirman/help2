@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-const std::string Options::includeFlag = "-I";
+std::string Options::includeFlag;
 
 void Options::parseArguments(int argc, char *argv[]) {
     // Start from the second argument; we don't care about the call to the program
@@ -36,4 +36,8 @@ void Options::parseArguments(int argc, char *argv[]) {
     }
 
     fileStruct.addDefaultExtensions();
+}
+
+void Options::setup() {
+    includeFlag = "-I";
 }

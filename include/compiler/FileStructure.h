@@ -13,6 +13,11 @@
 
 class FileStructure {
 public:
+    struct Module {
+        std::filesystem::path filePath;
+        std::string moduleName;
+    };
+
     FileStructure() = default;
 
     void addIncludeDir(const std::filesystem::path& dir);
@@ -29,10 +34,14 @@ public:
 
     const std::filesystem::path &getFileName(std::size_t index) const;
 
+    void setModuleName(size_t index, std::string name);
+
+    const std::string &getModuleName(std::size_t index) const;
+
 private:
     std::unordered_set<std::string> includeDirs;
     std::unordered_set<std::string> extensions;
-    std::vector<std::filesystem::path> programFiles;
+    std::vector<Module> modules;
 };
 
 

@@ -6,14 +6,69 @@
 #include "../../../include/compiler/CodeGenerator.h"
 
 #include <iostream>
+#include <numeric>
+#include <sstream>
 
-DataConstructorASTNode::DataConstructorASTNode(size_t lineNum, size_t fileIndex,
-                                               const TypeDeclASTNode &type,
-                                               std::string constructorName)
-        : ASTNode(lineNum, fileIndex), type(type), constructorName(std::move(constructorName)) {
-
+DataConstructorASTNode::DataConstructorASTNode(size_t lineNum, size_t fileIndex, const TypeDeclASTNode &type,
+                                               std::string constructorName,
+                                               std::vector<std::unique_ptr<TypeInstanceASTNode>> &&parameters)
+        : ASTNode(lineNum, fileIndex), type(type), constructorName(std::move(constructorName)),
+          consUsage(ConstructorUsage::Prefix) {
+    // Create the return type of the constructor
+    std::unique_ptr<TypeInstanceASTNode> constructorType = type.createInstance(*this);
+    // Now, in reverse order, move each constructor parameter type to be a function pointing to the current
+    // return type
+    for (std::vector<std::unique_ptr<TypeInstanceASTNode>>::reverse_iterator it = parameters.rbegin();
+         it != parameters.rend(); ++it) {
+        constructorType = std::make_unique<FunctionTypeInstanceASTNode>(
+                lineNum, fileIndex, std::move(*it), std::move(constructorType)
+        );
+    }
+    // The prerequisite list is always empty, but we still need to supply one
+    PrerequisiteList prerequisites;
+    if (parameters.empty()) {
+        function = std::make_unique<FunctionDefinitionASTNode>(std::make_unique<ValueFunctionDeclASTNode>(
+                lineNum, fileIndex, constructorName, std::move(prerequisites), constructorType->clone()
+        ));
+    } else {
+        function = std::make_unique<FunctionDefinitionASTNode>(std::make_unique<PrefixFunctionDeclASTNode>(
+                lineNum, fileIndex, constructorName, std::move(prerequisites), constructorType->clone()
+        ));
+    }
 }
 
+DataConstructorASTNode::DataConstructorASTNode(size_t lineNum, size_t fileIndex, const TypeDeclASTNode &type,
+                                               std::string constructorName,
+                                               std::unique_ptr<TypeInstanceASTNode> &&leftParam,
+                                               std::unique_ptr<TypeInstanceASTNode> &&rightParam)
+        : ASTNode(lineNum, fileIndex), type(type), constructorName(std::move(constructorName)),
+          consUsage(ConstructorUsage::Infix) {
+    std::unique_ptr<TypeInstanceASTNode> constructorType = type.createInstance(*this);
+    constructorType = std::make_unique<FunctionTypeInstanceASTNode>(
+            lineNum, fileIndex, std::move(rightParam), std::move(constructorType)
+    );
+    constructorType = std::make_unique<FunctionTypeInstanceASTNode>(
+            lineNum, fileIndex, std::move(leftParam), std::move(constructorType)
+    );
+    // The prerequisite list is always empty, but we still need to supply one
+    PrerequisiteList prerequisites;
+    function = std::make_unique<FunctionDefinitionASTNode>(std::make_unique<InfixFunctionDeclASTNode>(
+            lineNum, fileIndex, constructorName, std::move(prerequisites), constructorType->clone(),
+            Associativity::Right
+    ));
+}
+
+size_t DataConstructorASTNode::args() const {
+    return function->decl().maxArgs();
+}
+
+llvm::Type *
+DataConstructorASTNode::generate(TypeCodeGenerator &generator, const std::string &uniqueTypeName, unsigned char tagSize,
+                                 unsigned short tag, const BindingMap &bindingMap) const {
+    return nullptr;
+}
+
+/*
 PrefixDataConstructorASTNode::PrefixDataConstructorASTNode(size_t lineNum, size_t fileIndex,
                                                            const TypeDeclASTNode &type,
                                                            const std::string &constructorName)
@@ -25,8 +80,72 @@ PrefixDataConstructorASTNode::PrefixDataConstructorASTNode(size_t lineNum, size_
                                                            const TypeDeclASTNode &type,
                                                            const std::string &constructorName,
                                                            std::vector<std::unique_ptr<TypeInstanceASTNode>> &&parameters)
-        : DataConstructorASTNode(lineNum, fileIndex, type, constructorName), params(std::move(parameters)) {
+        : DataConstructorASTNode(lineNum, fileIndex, type, constructorName) {
+    for (const std::unique_ptr<TypeInstanceASTNode> &param : params) {
+        paramList.emplace_back(*param);
+    }
+}
 
+std::unique_ptr<FunctionDeclASTNode> PrefixDataConstructorASTNode::createConstructorFunction() const {
+    // We just need to make a function declaration, no actual implementations
+
+    // The prerequisite list is always empty, but we still need to supply one
+    PrerequisiteList prerequisites;
+
+    // We need to create an instance of the type this constructor will return
+    std::unique_ptr<TypeInstanceASTNode> returnType;
+
+    switch (type.typeUsage()) {
+        case TypeUsage::Infix: {
+            const InfixTypeDeclASTNode &infixType = dynamic_cast<const InfixTypeDeclASTNode &>(type);
+            std::unique_ptr<InfixTypeInstanceASTNode> infixReturnType = std::make_unique<InfixTypeInstanceASTNode>(
+                    lineNumber(), fileIndex(), infixType.typeName()
+            );
+            // The arguments are necessarily going to be polymorphic type instances
+            infixReturnType->bindLeft(std::make_unique<PolymorphicTypeInstanceASTNode>(
+                    lineNumber(), fileIndex(), infixType.leftParameterName()
+            ));
+            infixReturnType->bindRight(std::make_unique<PolymorphicTypeInstanceASTNode>(
+                    lineNumber(), fileIndex(), infixType.rightParameterName()
+            ));
+            returnType = std::move(infixReturnType);
+            break;
+        }
+        case TypeUsage::Prefix: {
+            const PrefixTypeDeclASTNode &prefixType = dynamic_cast<const PrefixTypeDeclASTNode &>(type);
+            std::unique_ptr<PrefixTypeInstanceASTNode> prefixReturnType = std::make_unique<PrefixTypeInstanceASTNode>(
+                    lineNumber(), fileIndex(), prefixType.typeName()
+            );
+            for (const std::string &param : prefixType.parameterNames()) {
+                prefixReturnType->bindParameter(std::make_unique<PolymorphicTypeInstanceASTNode>(
+                        lineNumber(), fileIndex(), param
+                ));
+            }
+            returnType = std::move(prefixReturnType);
+            break;
+        }
+        case TypeUsage::Function:
+        case TypeUsage::Polymorphic:
+        case TypeUsage::Primitive:
+            // We should never have a constructor which thinks its parent type is one of these!
+            std::cerr << "DEVELOPER: Attempted to create constructor for function, polymorphic or primitive type!"
+                      << std::endl;
+            throw;
+    }
+
+    // If there are no parameters, generate as a value function
+    if (params.empty()) {
+        return std::make_unique<ValueFunctionDeclASTNode>(
+                lineNumber(), fileIndex(), constructorName, std::move(prerequisites), std::move(returnType)
+        );
+    }
+
+    // Otherwise, we need to build up the entire function type, which we build up from the back of the param list
+    for (RefList<TypeInstanceASTNode>::const_reverse_iterator it = paramList.rbegin(); it != paramList.rend(); ++it) {
+        returnType = std::make_unique<FunctionTypeInstanceASTNode>(
+                lineNumber(), fileIndex(),
+        )
+    }
 }
 
 llvm::Type *
@@ -72,6 +191,7 @@ InfixDataConstructorASTNode::generate(TypeCodeGenerator &generator, const std::s
             .bindingMap = bindingMap
     });
 }
+ */
 
 TypeDeclASTNode::TypeDeclASTNode(size_t lineNum, size_t fileIndex, std::string name)
         : ASTNode(lineNum, fileIndex), name(std::move(name)) {
@@ -85,6 +205,7 @@ TypeDeclASTNode::TypeDeclASTNode(size_t lineNum, size_t fileIndex, std::string n
 }
 
 void TypeDeclASTNode::addDataConstructor(std::unique_ptr<DataConstructorASTNode> &&constructor) {
+    constructorList.emplace_back(*constructor);
     constructors.push_back(std::move(constructor));
 }
 
@@ -100,6 +221,18 @@ PrefixTypeDeclASTNode::PrefixTypeDeclASTNode(size_t lineNum, size_t fileIndex, c
         : TypeDeclASTNode(lineNum, fileIndex, name, std::move(constructors)),
           typeConstructorParameters(std::move(typeVariables)) {
 
+}
+
+std::unique_ptr<TypeInstanceASTNode> PrefixTypeDeclASTNode::createInstance(const ASTNode &at) const {
+    std::unique_ptr<PrefixTypeInstanceASTNode> prefix = std::make_unique<PrefixTypeInstanceASTNode>(
+            at.lineNumber(), at.fileIndex(), name
+    );
+    for (const std::string &name : typeConstructorParameters) {
+        prefix->bindParameter(std::make_unique<PolymorphicTypeInstanceASTNode>(
+                at.lineNumber(), at.fileIndex(), name
+        ));
+    }
+    return prefix;
 }
 
 llvm::Type *PrefixTypeDeclASTNode::generate(TypeCodeGenerator &generator) const {
@@ -132,6 +265,14 @@ InfixTypeDeclASTNode::InfixTypeDeclASTNode(size_t lineNum, size_t fileIndex, con
 
 }
 
+std::unique_ptr<TypeInstanceASTNode> InfixTypeDeclASTNode::createInstance(const ASTNode &at) const {
+    return std::make_unique<InfixTypeInstanceASTNode>(
+            at.lineNumber(), at.fileIndex(), name,
+            std::make_unique<PolymorphicTypeInstanceASTNode>(at.lineNumber(), at.fileIndex(), leftParameter),
+            std::make_unique<PolymorphicTypeInstanceASTNode>(at.lineNumber(), at.fileIndex(), rightParameter)
+    );
+}
+
 llvm::Type *
 InfixTypeDeclASTNode::generate(TypeCodeGenerator &generator, llvm::Type *leftBinding, llvm::Type *rightBinding) const {
     return generator.generate<TypeDeclASTNode>(View{
@@ -156,8 +297,8 @@ bool operator==(const TypeInstanceASTNode &lhs, const TypeInstanceASTNode &rhs) 
                     &infixR = dynamic_cast<const InfixTypeInstanceASTNode &>(rhs);
 
             return infixL.typeName() == infixR.typeName() &&
-                   *infixL.left() == *infixR.left()
-                   && *infixL.right() == *infixR.right();
+                   infixL.left() == infixR.left() &&
+                   infixL.right() == infixR.right();
         }
         case TypeUsage::Prefix: {
             const PrefixTypeInstanceASTNode
@@ -168,7 +309,7 @@ bool operator==(const TypeInstanceASTNode &lhs, const TypeInstanceASTNode &rhs) 
                 return false;
             }
 
-            const std::vector<std::unique_ptr<TypeInstanceASTNode>>
+            const RefList<TypeInstanceASTNode>
                     &lSubTerms = prefixL.parameters(),
                     &rSubTerms = prefixR.parameters();
 
@@ -177,7 +318,7 @@ bool operator==(const TypeInstanceASTNode &lhs, const TypeInstanceASTNode &rhs) 
             }
 
             for (size_t i = 0; i < lSubTerms.size(); i++) {
-                if (*lSubTerms[i] != *rSubTerms[i]) {
+                if (lSubTerms[i] != rSubTerms[i]) {
                     return false;
                 }
             }
@@ -188,7 +329,7 @@ bool operator==(const TypeInstanceASTNode &lhs, const TypeInstanceASTNode &rhs) 
                     &funcL = dynamic_cast<const FunctionTypeInstanceASTNode &>(lhs),
                     &funcR = dynamic_cast<const FunctionTypeInstanceASTNode &>(rhs);
 
-            return *funcL.left() == *funcR.left() && *funcL.right() == *funcR.right();
+            return funcL.left() == funcR.left() && funcL.right() == funcR.right();
         }
         case TypeUsage::Polymorphic:
             // Polymorphic type variables are always considered equal, as they can be anything
@@ -201,6 +342,7 @@ bool operator==(const TypeInstanceASTNode &lhs, const TypeInstanceASTNode &rhs) 
             return primL.primitiveType().name() == primR.primitiveType().name();
         }
     }
+    return false;
 }
 
 bool operator!=(const TypeInstanceASTNode &lhs, const TypeInstanceASTNode &rhs) {
@@ -213,6 +355,7 @@ UserTypeInstanceASTNode::UserTypeInstanceASTNode(size_t lineNum, size_t fileInde
 }
 
 void PrefixTypeInstanceInterface::bindParameter(std::unique_ptr<TypeInstanceASTNode> &&parameter) {
+    paramList.emplace_back(*parameter);
     params.push_back(std::move(parameter));
 }
 
@@ -220,6 +363,10 @@ PolymorphicTypeInstanceASTNode::PolymorphicTypeInstanceASTNode(size_t lineNum, s
                                                                const std::string &name)
         : UserTypeInstanceASTNode(lineNum, fileIndex, name) {
 
+}
+
+std::unique_ptr<TypeInstanceASTNode> PolymorphicTypeInstanceASTNode::clone() const {
+    return std::make_unique<PolymorphicTypeInstanceASTNode>(lineNumber(), fileIndex(), name);
 }
 
 bool PolymorphicTypeInstanceASTNode::isPolymorphic() const {
@@ -243,9 +390,32 @@ PolymorphicTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const 
     throw;
 }
 
+std::string PolymorphicTypeInstanceASTNode::typeString(bool) const {
+    if (paramList.empty()) {
+        return name;
+    }
+    return std::accumulate(paramList.begin(), paramList.end(), "(" + name,
+                           [](const std::string &acc, const TypeInstanceASTNode &param) {
+                               return acc + " " + param.typeString();
+                           }) + ')';
+}
+
 InfixTypeInstanceASTNode::InfixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name)
         : UserTypeInstanceASTNode(lineNum, fileIndex, name) {
 
+}
+
+InfixTypeInstanceASTNode::InfixTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
+                                                   std::unique_ptr<TypeInstanceASTNode> &&lhs,
+                                                   std::unique_ptr<TypeInstanceASTNode> &&rhs)
+        : UserTypeInstanceASTNode(lineNum, fileIndex, name), lhs(std::move(lhs)), rhs(std::move(rhs)) {
+
+}
+
+std::unique_ptr<TypeInstanceASTNode> InfixTypeInstanceASTNode::clone() const {
+    return std::make_unique<InfixTypeInstanceASTNode>(
+            lineNumber(), fileIndex(), name, lhs->clone(), rhs->clone()
+    );
 }
 
 void InfixTypeInstanceASTNode::bindLeft(std::unique_ptr<TypeInstanceASTNode> &&param) {
@@ -257,15 +427,15 @@ void InfixTypeInstanceASTNode::bindRight(std::unique_ptr<TypeInstanceASTNode> &&
 }
 
 bool InfixTypeInstanceASTNode::isPolymorphic() const {
-    return left()->isPolymorphic() || right()->isPolymorphic();
+    return left().isPolymorphic() || right().isPolymorphic();
 }
 
 bool InfixTypeInstanceASTNode::containsClosures() const {
-    return left()->containsClosures() || right()->containsClosures();
+    return left().containsClosures() || right().containsClosures();
 }
 
 bool InfixTypeInstanceASTNode::containsFunctionType() const {
-    return left()->containsFunctionType() || right()->containsFunctionType();
+    return left().containsFunctionType() || right().containsFunctionType();
 }
 
 llvm::Type *InfixTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const {
@@ -277,13 +447,44 @@ llvm::Type *InfixTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, 
     });
 }
 
-FunctionTypeInstanceASTNode::FunctionTypeInstanceASTNode(size_t lineNum, size_t fileIndex, const std::string &name)
-        : InfixTypeInstanceASTNode(lineNum, fileIndex, name) {
+std::string InfixTypeInstanceASTNode::typeString(bool leftPos) const {
+    std::stringstream ss;
+    // Print in right associative form
+    if (leftPos) {
+        ss << "(";
+    }
+
+    ss << left().typeString(true);
+    ss << " " << name << " ";
+    ss << right().typeString(true);
+
+    if (leftPos) {
+        ss << ")";
+    }
+
+    return ss.str();
+}
+
+FunctionTypeInstanceASTNode::FunctionTypeInstanceASTNode(size_t lineNum, size_t fileIndex)
+        : InfixTypeInstanceASTNode(lineNum, fileIndex, "->") {
 
 }
 
-bool FunctionTypeInstanceASTNode::containsClosures() const {
+FunctionTypeInstanceASTNode::FunctionTypeInstanceASTNode(size_t lineNum, size_t fileIndex,
+                                                         std::unique_ptr<TypeInstanceASTNode> &&from,
+                                                         std::unique_ptr<TypeInstanceASTNode> &&to)
+        : InfixTypeInstanceASTNode(lineNum, fileIndex, "->", std::move(from), std::move(to)) {
 
+}
+
+std::unique_ptr<TypeInstanceASTNode> FunctionTypeInstanceASTNode::clone() const {
+    return std::make_unique<FunctionTypeInstanceASTNode>(
+            lineNumber(), fileIndex(), lhs->clone(), rhs->clone()
+    );
+}
+
+bool FunctionTypeInstanceASTNode::containsClosures() const {
+    return false;
 }
 
 bool FunctionTypeInstanceASTNode::containsFunctionType() const {
@@ -291,7 +492,7 @@ bool FunctionTypeInstanceASTNode::containsFunctionType() const {
 }
 
 std::size_t FunctionTypeInstanceASTNode::functionDepth() const {
-    return right()->functionDepth() + 1;
+    return right().functionDepth() + 1;
 }
 
 llvm::Type *FunctionTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const BindingMap &bindingMap) const {
@@ -308,10 +509,20 @@ PrefixTypeInstanceASTNode::PrefixTypeInstanceASTNode(size_t lineNum, size_t file
 
 }
 
+std::unique_ptr<TypeInstanceASTNode> PrefixTypeInstanceASTNode::clone() const {
+    std::unique_ptr<PrefixTypeInstanceASTNode> prefix = std::make_unique<PrefixTypeInstanceASTNode>(
+            lineNumber(), fileIndex(), name
+    );
+    for (const TypeInstanceASTNode &param : paramList) {
+        prefix->bindParameter(param.clone());
+    }
+    return prefix;
+}
+
 bool PrefixTypeInstanceASTNode::isPolymorphic() const {
     return std::any_of(parameters().begin(), parameters().end(),
-                       [](const std::unique_ptr<TypeInstanceASTNode> &param) {
-                           return param->isPolymorphic();
+                       [](const TypeInstanceASTNode &param) {
+                           return param.isPolymorphic();
                        });
 }
 
@@ -331,9 +542,23 @@ llvm::Type *PrefixTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator,
     });
 }
 
+std::string PrefixTypeInstanceASTNode::typeString(bool) const {
+    if (paramList.empty()) {
+        return name;
+    }
+    return std::accumulate(paramList.begin(), paramList.end(), "(" + name,
+                           [](const std::string &acc, const TypeInstanceASTNode &param) {
+                               return acc + " " + param.typeString();
+                           }) + ')';
+}
+
 PrimitiveTypeInstanceASTNode::PrimitiveTypeInstanceASTNode(const PrimitiveType &type)
         : type(type) {
 
+}
+
+std::unique_ptr<TypeInstanceASTNode> PrimitiveTypeInstanceASTNode::clone() const {
+    return std::make_unique<PrimitiveTypeInstanceASTNode>(type);
 }
 
 llvm::Type *
@@ -341,6 +566,10 @@ PrimitiveTypeInstanceASTNode::instantiate(TypeCodeGenerator &generator, const Bi
     return generator.generate<PrimitiveTypeInstanceASTNode>(View{
             .type = type
     });
+}
+
+std::string PrimitiveTypeInstanceASTNode::typeString(bool leftPos) const {
+    return type.name();
 }
 
 TypeclassASTNode::TypeclassASTNode(size_t lineNum, size_t fileIndex, std::string typeclassName, std::string variable,

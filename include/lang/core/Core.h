@@ -11,6 +11,7 @@
 #include "BuiltinFunction.h"
 
 class CoreBuilder;
+class ParseTree;
 
 class Core {
     friend class CoreBuilder;
@@ -28,6 +29,8 @@ public:
     const std::unique_ptr<BuiltinFunction> &getBuiltinFunction(const std::string &name) const;
 
     const PrimitiveType &unitType() const;
+
+    void populateTree(ParseTree &tree) const;
 
 private:
     Core() = default;

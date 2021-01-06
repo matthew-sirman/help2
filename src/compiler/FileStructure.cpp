@@ -49,10 +49,21 @@ std::optional<std::filesystem::path> FileStructure::searchForQualifiedFile(const
 
 std::size_t FileStructure::allocateFileIndex(std::filesystem::path file) {
     // Add the file to the vector and return the size - 1 (the last index of the file)
-    programFiles.push_back(std::move(file));
-    return programFiles.size() - 1;
+    std::filesystem::path moduleName = file.filename();
+    moduleName.replace_extension();
+    modules.push_back({ std::move(file), moduleName.generic_string() });
+    modules.back().moduleName.push_back('.');
+    return modules.size() - 1;
 }
 
 const std::filesystem::path &FileStructure::getFileName(std::size_t index) const {
-    return programFiles[index];
+    return modules[index].filePath;
+}
+
+void FileStructure::setModuleName(size_t index, std::string name) {
+    modules[index].moduleName = std::move(name);
+}
+
+const std::string &FileStructure::getModuleName(std::size_t index) const {
+    return modules[index].moduleName;
 }

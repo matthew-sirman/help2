@@ -79,6 +79,12 @@ protected:
 struct IdentifierToken : public Token {
     friend class Tokeniser;
 
+    enum class AnyMode {
+        Identifier,
+        PrefixOperator,
+        InfixOperator
+    };
+
     std::string identifier;
 
 private:
@@ -195,8 +201,11 @@ public:
     // Token: 'import'
     static bool tokenImport(Token &token);
 
+    // Token: 'module'
+    static bool tokenModule(Token &token);
+
     // Token: '.'
-    static bool tokenImportDelimiter(Token &token);
+    static bool tokenModuleDelimiter(Token &token);
 
     // Token: 'infix'
     static bool tokenInfix(Token &token);
@@ -209,6 +218,9 @@ public:
 
     // Token: 'associates'
     static bool tokenAssociates(Token &token);
+
+    // Token: 'virtual'
+    static bool tokenVirtual(Token &token);
 
     // Token: 'func'
     static bool tokenFunc(Token &token);
@@ -299,8 +311,11 @@ public:
     // Token: (re) [a-zA-Z][a-zA-Z0-9_]*'*
     static bool tokenIdentifier(IdentifierToken &token);
 
-    // Token: tokenIdentifier OR any operator
+    // Token: tokenIdentifier OR any special identifier
     static bool tokenAnyIdentifier(IdentifierToken &token);
+
+    // Token: tokenIdentifier OR any special identifier
+    static bool tokenAnyTrackedIdentifier(IdentifierToken &token, IdentifierToken::AnyMode &type);
 
     // Token: (re) [0-9]+
     static bool tokenIntegralLiteral(IntegralToken &token);
@@ -316,9 +331,6 @@ public:
 
     // Find the next plain token
     static PlainToken scanToken(const Token &token);
-
-    // Search for a particular string
-    static bool searchFor(const Token &token, const std::string &string);
 
     // Composes a set of token scans which must all succeed for the token to be updated. The token
     // must be passable to each of the functions, and so must be the most derived types, and certain

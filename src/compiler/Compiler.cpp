@@ -87,15 +87,15 @@ void Compiler::compile() {
     TypeCodeGenerator typeGenerator(context);
     FunctionCodeGenerator functionGenerator(context, typeGenerator);
 
-    for (const std::pair<const std::string, std::unique_ptr<FunctionDefinitionASTNode>> &func : context.tree.functions()) {
+    for (const FunctionDefinitionASTNode &func : context.tree.functions()) {
         // Skip over polymorphic functions - they will be instantiated on demand from concrete functions
         // Note that it is impossible to ever "add" polymorphism in a function, i.e. a concrete function
         // can never become polymorphic in the body.
-        if (func.second->isPolymorphic()) {
+        if (func.isPolymorphic()) {
             continue;
         }
         // Generate the functions which will in turn generate any dependent functions or types and specialise any
         // polymorphic ones. Note this also means the binding map is empty at this point.
-        func.second->generate(functionGenerator, {});
+        func.generate(functionGenerator, {});
     }
 }

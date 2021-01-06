@@ -13,8 +13,8 @@ FunctionDeclASTNode::FunctionDeclASTNode(size_t lineNum, size_t fileIndex, std::
                                          PrerequisiteList &&prerequisites,
                                          std::unique_ptr<TypeInstanceASTNode> &&funcType)
         : ASTNode(lineNum, fileIndex), funcName(std::move(name)), funcType(std::move(funcType)),
-          prerequisites(std::move(prerequisites)) {
-
+          prerequisites(std::move(prerequisites)), isVirtualFunc(this->prerequisites.empty()) {
+    // Set to virtual automatically if there are no prerequisites
 }
 
 PrefixFunctionDeclASTNode::PrefixFunctionDeclASTNode(size_t lineNum, size_t fileIndex, const std::string &name,
@@ -29,9 +29,9 @@ size_t PrefixFunctionDeclASTNode::maxArgs() const {
     size_t m = 1;
     const FunctionTypeInstanceASTNode *curType = dynamic_cast<const FunctionTypeInstanceASTNode *>(funcType.get());
     // For as long as the right type of the function type is a function type, increment the counter and recurse
-    while (curType->right()->typeUsage() == TypeUsage::Function) {
+    while (curType->right().typeUsage() == TypeUsage::Function) {
         m++;
-        curType = dynamic_cast<const FunctionTypeInstanceASTNode *>(curType->right().get());
+        curType = dynamic_cast<const FunctionTypeInstanceASTNode *>(&curType->right());
     }
     return m;
 }
@@ -55,22 +55,34 @@ ValueFunctionDeclASTNode::ValueFunctionDeclASTNode(size_t lineNum, size_t fileIn
 
 }
 
+FunctionImplASTNode::FunctionImplASTNode(size_t lineNum, size_t fileIndex,
+                                         std::vector<std::unique_ptr<PatternASTNode>> &&patterns,
+                                         std::unique_ptr<ExpressionASTNode> &&body)
+        : ASTNode(lineNum, fileIndex), patterns(std::move(patterns)), body(std::move(body)) {
+    for (const std::unique_ptr<PatternASTNode> &pattern : this->patterns) {
+        patternList.emplace_back(*pattern);
+    }
+}
 
-FunctionImplASTNode::FunctionImplASTNode(size_t lineNum, size_t fileIndex, std::unique_ptr<ExpressionASTNode> &&body)
-        : ASTNode(lineNum, fileIndex), body(std::move(body)) {
+llvm::BasicBlock *
+FunctionImplASTNode::generate(FunctionCodeGenerator &generator, unsigned int variant, llvm::Function *parentFunction) {
+    return nullptr;
+}
+
+/*
+FunctionImplASTNode::FunctionImplASTNode(size_t lineNum, size_t fileIndex)
+        : ASTNode(lineNum, fileIndex), body(nullptr) {
+
+}
+
+PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex)
+        : FunctionImplASTNode(lineNum, fileIndex) {
 
 }
 
 PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
-                                                     std::unique_ptr<ExpressionASTNode> &&body)
-        : FunctionImplASTNode(lineNum, fileIndex, std::move(body)) {
-
-}
-
-PrefixFunctionImplASTNode::PrefixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
-                                                     std::unique_ptr<ExpressionASTNode> &&body,
                                                      std::vector<std::unique_ptr<PatternASTNode>> &&patterns)
-        : FunctionImplASTNode(lineNum, fileIndex, std::move(body)), patterns(std::move(patterns)) {
+        : FunctionImplASTNode(lineNum, fileIndex), patterns(std::move(patterns)) {
 
 }
 
@@ -92,10 +104,9 @@ llvm::BasicBlock *PrefixFunctionImplASTNode::generate(FunctionCodeGenerator &gen
 }
 
 InfixFunctionImplASTNode::InfixFunctionImplASTNode(size_t lineNum, size_t fileIndex,
-                                                   std::unique_ptr<ExpressionASTNode> &&body,
                                                    std::unique_ptr<PatternASTNode> &&left,
                                                    std::unique_ptr<PatternASTNode> &&right)
-        : FunctionImplASTNode(lineNum, fileIndex, std::move(body)), lhs(std::move(left)), rhs(std::move(right)) {
+        : FunctionImplASTNode(lineNum, fileIndex), lhs(std::move(left)), rhs(std::move(right)) {
 
 }
 
@@ -108,6 +119,7 @@ llvm::BasicBlock *InfixFunctionImplASTNode::generate(FunctionCodeGenerator &gene
             .parentFunction = parentFunction
     });
 }
+ */
 
 FunctionDefinitionASTNode::FunctionDefinitionASTNode(std::unique_ptr<FunctionDeclASTNode> &&declaration)
         : declaration(std::move(declaration)) {
@@ -115,6 +127,7 @@ FunctionDefinitionASTNode::FunctionDefinitionASTNode(std::unique_ptr<FunctionDec
 }
 
 void FunctionDefinitionASTNode::addImplementation(std::unique_ptr<FunctionImplASTNode> &&implementation) {
+    implementationList.emplace_back(*implementation);
     implementations.push_back(std::move(implementation));
 }
 

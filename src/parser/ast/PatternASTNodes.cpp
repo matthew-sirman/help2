@@ -15,7 +15,11 @@ VariablePatternASTNode::VariablePatternASTNode(size_t lineNum, size_t fileIndex,
 }
 
 void VariablePatternASTNode::addAllBinders(BinderMap &map) const {
-    map[binderName] = this;
+    map.emplace(binderName, *this);
+}
+
+void VariablePatternASTNode::removeAllBinders(BinderMap &map) const {
+    map.erase(binderName);
 }
 
 ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor)
@@ -23,15 +27,17 @@ ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t file
 
 }
 
-ConstructorPatternASTNode::ConstructorPatternASTNode(size_t lineNum, size_t fileIndex, std::string dataConstructor,
-                                                     std::vector<std::unique_ptr<PatternASTNode>> &&subPatterns)
-        : PatternASTNode(lineNum, fileIndex), dataConstructorName(std::move(dataConstructor)),
-          subPatterns(std::move(subPatterns)) {
-    // Make pattern subtrees doubly linked
-    unsigned posIdx = 0;
-    std::for_each(this->subPatterns.begin(), this->subPatterns.end(),
-                  [this, &posIdx](const std::unique_ptr<PatternASTNode> &node) {
-                      node->setParent(this, posIdx++);
+void ConstructorPatternASTNode::bindSubPattern(std::unique_ptr<PatternASTNode> &&subPattern) {
+    // Set the parent of the new pattern to this node, and its position to the current number of patterns
+    subPattern->setParent(this, subPatterns.size());
+    subPatternList.emplace_back(*subPattern);
+    subPatterns.push_back(std::move(subPattern));
+}
+
+void ConstructorPatternASTNode::removeAllBinders(BinderMap &map) const {
+    std::for_each(subPatterns.begin(), subPatterns.end(),
+                  [&map](const std::unique_ptr<PatternASTNode> &node) {
+                      node->removeAllBinders(map);
                   });
 }
 
@@ -41,3 +47,13 @@ void ConstructorPatternASTNode::addAllBinders(BinderMap &map) const {
                       node->addAllBinders(map);
                   });
 }
+
+template<typename ValueType, PatternUsage usage>
+LiteralPatternASTNode<ValueType, usage>::LiteralPatternASTNode(size_t lineNum, size_t fileIndex, ValueType value)
+        : PatternASTNode(lineNum, fileIndex), value(value) {
+
+}
+
+template class LiteralPatternASTNode<long long, PatternUsage::Integral>;
+template class LiteralPatternASTNode<double, PatternUsage::Decimal>;
+template class LiteralPatternASTNode<char, PatternUsage::Char>;

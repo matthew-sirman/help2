@@ -29,7 +29,11 @@ bool Tokeniser::tokenImport(Token &token) {
     return matchKeywordToken(token, "import");
 }
 
-bool Tokeniser::tokenImportDelimiter(Token &token) {
+bool Tokeniser::tokenModule(Token &token) {
+    return matchKeywordToken(token, "module");
+}
+
+bool Tokeniser::tokenModuleDelimiter(Token &token) {
     return matchSpecifierToken(token, ".");
 }
 
@@ -47,6 +51,10 @@ bool Tokeniser::tokenRight(Token &token) {
 
 bool Tokeniser::tokenAssociates(Token &token) {
     return matchKeywordToken(token, "associates");
+}
+
+bool Tokeniser::tokenVirtual(Token &token) {
+    return matchKeywordToken(token, "virtual");
 }
 
 bool Tokeniser::tokenFunc(Token &token) {
@@ -178,10 +186,25 @@ bool Tokeniser::tokenIdentifier(IdentifierToken &token) {
 }
 
 bool Tokeniser::tokenAnyIdentifier(IdentifierToken &token) {
+    IdentifierToken::AnyMode type;
+    return tokenAnyTrackedIdentifier(token, type);
+}
+
+bool Tokeniser::tokenAnyTrackedIdentifier(IdentifierToken &token, IdentifierToken::AnyMode &type) {
     // Check for a normal identifier, then an infix operator, then a prefix operator
-    return tokenIdentifier(token) ||
-           matchStringRegexToken(token, infixOpRegex, token.identifier, 1) ||
-           matchStringRegexToken(token, prefixOpRegex, token.identifier, 1);
+    if (tokenIdentifier(token)) {
+        type = IdentifierToken::AnyMode::Identifier;
+        return true;
+    }
+    if (matchStringRegexToken(token, prefixOpRegex, token.identifier, 1)) {
+        type = IdentifierToken::AnyMode::PrefixOperator;
+        return true;
+    }
+    if (matchStringRegexToken(token, infixOpRegex, token.identifier, 1)) {
+        type = IdentifierToken::AnyMode::InfixOperator;
+        return true;
+    }
+    return false;
 }
 
 bool Tokeniser::tokenIntegralLiteral(IntegralToken &token) {
@@ -246,10 +269,6 @@ PlainToken Tokeniser::scanToken(const Token &token) {
     return plain;
 }
 
-bool Tokeniser::searchFor(const Token &token, const std::string &string) {
-    return std::regex_search(token.position, token.end, std::regex(escapeRegex(string)));
-}
-
 std::vector<Tokeniser> Tokeniser::findAllStatements() const {
     std::string statement;
     std::vector<Tokeniser> statements;
@@ -269,8 +288,14 @@ std::vector<Tokeniser> Tokeniser::findAllStatements() const {
         if (*it == '\n') {
             line++;
         }
-        // Add the current char to the current statement
-        statement.push_back(*it);
+        if (statement.empty()) {
+            startLine = line;
+        }
+        // Add the current char to the current statement if it is a non-space character, or the statement
+        // has been started
+        if (!statement.empty() || !isspace(*it)) {
+            statement.push_back(*it);
+        }
         if (*it == ';') {
             // Add this statement string to the vector
             statements.emplace_back(std::move(statement), startLine);

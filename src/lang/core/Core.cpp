@@ -44,6 +44,10 @@ const PrimitiveType &Core::unitType() const {
     return unit.value();
 }
 
+void Core::populateTree(ParseTree &tree) const {
+
+}
+
 void Core::addPrimitiveType(PrimitiveType &&prim) {
     primitiveTypeMap.emplace(prim.name(), std::move(prim));
 }
